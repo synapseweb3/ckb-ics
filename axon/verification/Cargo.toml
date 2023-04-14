@@ -1,0 +1,9 @@
+[package]
+name = "ckb-ics-axon-verfication"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# ethers-core = "2.0"
+axon-protocol ={ git = "https://github.com/axonweb3/axon.git", tag = "v0.1.0-alpha.8"}
+hasher = "0.1.4"
