@@ -40,7 +40,7 @@ pub enum Ordering {
 pub struct ConnectionId {
     pub client_id: String,
     pub connection_id: String,
-    pub commitment_prefix: Bytes,
+    // pub commitment_prefix: Bytes,
 }
 
 pub struct ChannelId {
