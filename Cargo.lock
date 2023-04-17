@@ -404,15 +404,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "ckb-ics-axon-connection"
-version = "0.1.0"
-
-[[package]]
 name = "ckb-ics-axon-verfication"
 version = "0.1.0"
 dependencies = [
  "axon-protocol",
  "hasher",
+ "rlp",
 ]
 
 [[package]]

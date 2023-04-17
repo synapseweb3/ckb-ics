@@ -1,16 +1,18 @@
+pub mod message;
 pub mod types;
+
 use axon_protocol::trie;
 use axon_protocol::types::{Hash, MerkleRoot, Receipt};
 use hasher::HasherKeccak;
-use types::{Message, VerifyError};
+use types::{IcsComponent, VerifyError};
 
-pub fn verfify_event<M: Message>(
+pub fn verfify_event<I: IcsComponent>(
     tx_hash: Hash,
     tx_root: MerkleRoot,
     tx_proof: Vec<Vec<u8>>,
     receipt_root: MerkleRoot,
     receipt: Receipt,
-    msg: M,
+    msg: I,
     receipt_proof: Vec<Vec<u8>>,
 ) -> Result<(), VerifyError> {
     if tx_hash != receipt.tx_hash {
@@ -31,8 +33,9 @@ fn verify_tx(tx_hash: Hash, root: MerkleRoot, proof: Vec<Vec<u8>>) -> Result<(),
     Ok(())
 }
 
-fn verify_receipt<M: Message>(
-    expect: M,
+// Get the frist log as IcsComponent.
+fn verify_receipt<I: IcsComponent>(
+    expect: I,
     receipt: Receipt,
     root: MerkleRoot,
     proof: Vec<Vec<u8>>,
