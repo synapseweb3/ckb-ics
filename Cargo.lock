@@ -404,7 +404,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ckb-ics-axon-verfication"
+name = "ckb-ics-axon"
 version = "0.1.0"
 dependencies = [
  "axon-protocol",
