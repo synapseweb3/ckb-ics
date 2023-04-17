@@ -8,3 +8,4 @@ edition = "2021"
 axon-protocol ={ git = "https://github.com/axonweb3/axon.git", tag = "v0.1.0-alpha.8"}
 rlp = "0.5"
 hasher = "0.1.4"
+cstr_core = "0.2.6"

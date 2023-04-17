@@ -1,6 +1,7 @@
 use super::types::*;
-use axon_protocol::types::{Bytes, U256};
 
+use axon_protocol::types::{Bytes, U256};
+use cstr_core::CString;
 use rlp::{Decodable, Encodable, Rlp};
 
 pub struct Envelope {
@@ -57,7 +58,7 @@ impl Decodable for MsgClientCreate {
 }
 
 pub struct MsgClientUpdate {
-    pub client_id: String,
+    pub client_id: CString,
     pub header_bytes: Bytes,
 }
 
@@ -74,7 +75,7 @@ impl Decodable for MsgClientUpdate {
 }
 
 pub struct MsgClientMisbehaviour {
-    pub client_id: String,
+    pub client_id: CString,
     pub header1_bytes: Bytes,
     pub header2_bytes: Bytes,
 }
@@ -92,9 +93,9 @@ impl Decodable for MsgClientMisbehaviour {
 }
 
 pub struct MsgConnectionOpenInit {
-    pub client_id: String,
+    pub client_id: CString,
     pub counterparty: ConnectionId,
-    pub version: String,
+    pub version: CString,
     pub delay_duration: U256,
 }
 
@@ -111,11 +112,11 @@ impl Decodable for MsgConnectionOpenInit {
 }
 
 pub struct MsgConnectionOpenTry {
-    pub previous_connection_id: String,
-    pub client_id: String,
+    pub previous_connection_id: CString,
+    pub client_id: CString,
     pub client_state: ClientState,
     pub counterparty: ConnectionId,
-    pub counterparty_versions: Vec<String>,
+    pub counterparty_versions: Vec<CString>,
     pub delay_period: U256,
 }
 
@@ -132,11 +133,11 @@ impl Decodable for MsgConnectionOpenTry {
 }
 
 pub struct MsgConnectionOpenAck {
-    pub connection_id: String,
-    pub counterparty_connection_id: String,
+    pub connection_id: CString,
+    pub counterparty_connection_id: CString,
     pub client_state: ClientState,
     pub proofs: Proofs,
-    pub version: String,
+    pub version: CString,
 }
 
 impl Encodable for MsgConnectionOpenAck {
@@ -152,7 +153,7 @@ impl Decodable for MsgConnectionOpenAck {
 }
 
 pub struct MsgConnectionOpenConfirm {
-    pub connection_id: String,
+    pub connection_id: CString,
     pub proofs: Proofs,
 }
 
@@ -169,7 +170,7 @@ impl Decodable for MsgConnectionOpenConfirm {
 }
 
 pub struct MsgChannelOpenInit {
-    pub port_id: String,
+    pub port_id: CString,
     pub channel: ChannelEnd,
 }
 
@@ -186,10 +187,10 @@ impl Decodable for MsgChannelOpenInit {
 }
 
 pub struct MsgChannelOpenTry {
-    pub port_id: String,
+    pub port_id: CString,
     pub previous_channel_id: ChannelId,
     pub channel: ChannelEnd,
-    pub counterparty_version: String,
+    pub counterparty_version: CString,
     pub proofs: Proofs,
 }
 
@@ -206,10 +207,10 @@ impl Decodable for MsgChannelOpenTry {
 }
 
 pub struct MsgChannelOpenAck {
-    pub port_id: String,
+    pub port_id: CString,
     pub previous_channel_id: ChannelId,
     pub channel: ChannelEnd,
-    pub counterparty_version: String,
+    pub counterparty_version: CString,
     pub proofs: Proofs,
 }
 
@@ -226,7 +227,7 @@ impl Decodable for MsgChannelOpenAck {
 }
 
 pub struct MsgChannelOpenConfirm {
-    pub port_id: String,
+    pub port_id: CString,
     pub channel_id: ChannelId,
     pub proofs: Proofs,
 }
@@ -244,7 +245,7 @@ impl Decodable for MsgChannelOpenConfirm {
 }
 
 pub struct MsgChannelCloseInit {
-    pub port_id: String,
+    pub port_id: CString,
     pub channel_id: ChannelId,
 }
 
@@ -261,7 +262,7 @@ impl Decodable for MsgChannelCloseInit {
 }
 
 pub struct MsgChannelCloseConfirm {
-    pub port_id: String,
+    pub port_id: CString,
     pub channel_id: ChannelId,
     pub proofs: Proofs,
 }
