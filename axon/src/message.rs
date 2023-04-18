@@ -1,6 +1,7 @@
-use super::types::*;
-
-use axon_protocol::types::{Bytes, U256};
+use super::object::*;
+use super::Vec;
+use super::{Bytes, U256};
+// use axon_protocol::types::{Bytes, U256};
 use cstr_core::CString;
 use rlp::{Decodable, Encodable, Rlp};
 

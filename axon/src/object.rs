@@ -1,6 +1,12 @@
-use axon_protocol::types::{Bytes, U256};
+use crate::proof::ObjectProof;
 
-pub trait IcsComponent {
+// use axon_protocol::types::{Bytes, U256};
+use super::Bytes;
+use super::U256;
+use cstr_core::CString;
+
+// ChannelEnd, ConnectionEnd
+pub trait Object {
     fn encode(&self) -> Bytes;
 
     fn as_key(&self) -> &[u8];
@@ -38,42 +44,39 @@ pub enum Ordering {
 }
 
 pub struct ConnectionId {
-    pub client_id: String,
-    pub connection_id: String,
+    pub client_id: CString,
+    pub connection_id: CString,
     // pub commitment_prefix: Bytes,
 }
 
 pub struct ChannelId {
-    pub port_id: String,
-    pub channel_id: String,
+    pub port_id: CString,
+    pub channel_id: CString,
 }
 
 pub struct Proofs {
     pub height: U256,
-    pub object_proof: Bytes,
-    pub client_proof: Bytes,
-    pub consensus_proof: Bytes,
-    pub other_proof: Bytes,
+    pub object_proof: ObjectProof,
 }
 
 pub struct Packet {
     pub sequence: U256,
-    pub source_port_id: String,
-    pub source_channel_id: String,
-    pub destination_port_id: String,
-    pub destination_channel_id: String,
+    pub source_port_id: CString,
+    pub source_channel_id: CString,
+    pub destination_port_id: CString,
+    pub destination_channel_id: CString,
     pub payload: Bytes,
     pub timeout_height: Bytes, // bytes32
     pub timeout_timestamp: U256,
 }
 
 pub struct ClientState {
-    pub chain_id: String,
+    pub chain_id: CString,
     pub client_type: ClientType,
     pub latest_height: Bytes,
 }
 
-impl IcsComponent for ClientState {
+impl Object for ClientState {
     fn encode(&self) -> Bytes {
         todo!()
     }
@@ -92,13 +95,13 @@ pub struct ConsensusState {
 pub struct ConnectionEnd {
     pub connection_id: ConnectionId,
     pub state: State,
-    pub client_id: String,
+    pub client_id: CString,
     pub counterparty: ConnectionId,
     // pub versions: Vec<String>,
     pub delay_period: U256,
 }
 
-impl IcsComponent for ConnectionEnd {
+impl Object for ConnectionEnd {
     fn encode(&self) -> Bytes {
         todo!()
     }
@@ -117,7 +120,7 @@ pub struct ChannelEnd {
     // pub version: String,
 }
 
-impl IcsComponent for ChannelEnd {
+impl Object for ChannelEnd {
     fn encode(&self) -> Bytes {
         todo!()
     }
