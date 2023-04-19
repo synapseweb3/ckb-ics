@@ -18,6 +18,13 @@ pub enum VerifyError {
     InvalidTxProof,
     TxReceiptNotMatch,
     SerdeError,
+
+    ClientFrozen,
+
+    WrongConnectionCnt,
+    WrongConnectionState,
+    WrongConnectionCounterparty,
+    WrongConnectionClient,
 }
 
 pub enum ClientType {
@@ -28,12 +35,14 @@ pub enum ClientType {
     Ckb,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum State {
     Unknown,
     Init,
     OpenTry,
     Open,
     Closed,
+    Frozen,
 }
 
 pub enum Ordering {
@@ -42,9 +51,10 @@ pub enum Ordering {
     Ordered,
 }
 
+#[derive(Clone)]
 pub struct ConnectionId {
     pub client_id: CString,
-    pub connection_id: CString,
+    pub connection_id: Option<CString>,
     // pub commitment_prefix: Bytes,
 }
 
@@ -56,6 +66,7 @@ pub struct ChannelId {
 pub struct Proofs {
     pub height: U256,
     pub object_proof: ObjectProof,
+    pub client_proof: Vec<u8>,
 }
 
 pub struct Packet {

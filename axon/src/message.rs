@@ -119,6 +119,7 @@ pub struct MsgConnectionOpenTry {
     pub counterparty: ConnectionId,
     pub counterparty_versions: Vec<CString>,
     pub delay_period: U256,
+    pub proof: Proofs,
 }
 
 impl Encodable for MsgConnectionOpenTry {

@@ -4,7 +4,7 @@ extern crate alloc;
 
 pub use alloc::vec::Vec;
 
-pub mod cell;
+pub mod handler;
 pub mod message;
 pub mod object;
 pub mod proof;
@@ -15,18 +15,30 @@ pub mod verify_mpt;
 // use hasher::HasherKeccak;
 use ethereum_types::H256;
 use object::{Object, VerifyError};
-use proof::{Transaction, TransactionReceipt};
+use proof::{ObjectProof, Transaction, TransactionReceipt};
 use rlp::Encodable;
 use verify_mpt::verify_proof;
 
-pub type Bytes = Vec<u8>;
-pub type MerkleRoot = Vec<u8>;
 pub type U256 = Vec<u8>;
+pub type Bytes = Vec<u8>;
 
-pub fn verify_message<O: Object>(
+pub fn verify_object<O: Object>(object: O, object_proof: ObjectProof) -> Result<(), VerifyError> {
+    verify_message(
+        object_proof.tx_root,
+        object_proof.tx_proof,
+        object_proof.receipt_root,
+        object_proof.tx,
+        object_proof.receipt,
+        object,
+        object_proof.idx,
+        object_proof.receipt_proof,
+    )
+}
+
+fn verify_message<O: Object>(
     tx_root: H256,
     tx_proof: Vec<Vec<u8>>,
-    receipt_root: MerkleRoot,
+    receipt_root: H256,
     tx: Transaction,
     receipt: TransactionReceipt,
     object: O,
@@ -55,7 +67,7 @@ fn verify_tx(
 fn verify_receipt<O: Object>(
     expect: O,
     receipt: TransactionReceipt,
-    root: MerkleRoot,
+    root: H256,
     proof: Vec<Vec<u8>>,
     idx: u64,
 ) -> Result<(), VerifyError> {

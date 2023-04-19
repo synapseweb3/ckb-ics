@@ -8,14 +8,14 @@ use rlp_derive::{RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWr
 pub struct ObjectProof {
     pub tx: Transaction,
     pub tx_root: H256,
-    pub tx_proof: Vec<H256>,
+    pub tx_proof: Vec<Vec<u8>>,
 
     pub receipt: TransactionReceipt,
     pub receipt_root: H256,
-    pub receipt_proof: Vec<H256>,
+    pub receipt_proof: Vec<Vec<u8>>,
 
     // the transaction idx in the block
-    pub idx: u32,
+    pub idx: u64,
 }
 
 pub struct Transaction {
