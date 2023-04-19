@@ -15,54 +15,65 @@ pub mod verify_mpt;
 // use hasher::HasherKeccak;
 use ethereum_types::H256;
 use object::{Object, VerifyError};
-use proof::TransactionReceipt;
+use proof::{Transaction, TransactionReceipt};
+use rlp::Encodable;
+use verify_mpt::verify_proof;
 
 pub type Bytes = Vec<u8>;
 pub type MerkleRoot = Vec<u8>;
 pub type U256 = Vec<u8>;
 
-pub fn verify_message<I: Object>(
-    tx_hash: H256,
+pub fn verify_message<O: Object>(
     tx_root: H256,
-    tx_proof: Vec<H256>,
+    tx_proof: Vec<Vec<u8>>,
     receipt_root: MerkleRoot,
+    tx: Transaction,
     receipt: TransactionReceipt,
-    msg: I,
+    object: O,
+    idx: u64,
     receipt_proof: Vec<Vec<u8>>,
 ) -> Result<(), VerifyError> {
-    if tx_hash != receipt.transaction_hash {
-        return Err(VerifyError::TxReceiptNotMatch);
+    verify_tx(tx, tx_root, idx, tx_proof)?;
+    verify_receipt(object, receipt, receipt_root, receipt_proof, idx)
+}
+
+fn verify_tx(
+    tx: Transaction,
+    root: H256,
+    idx: u64,
+    proof: Vec<Vec<u8>>,
+) -> Result<(), VerifyError> {
+    let key = rlp::encode(&idx);
+    let value: Vec<u8> = tx.rlp().as_ref().into();
+    if verify_proof(&proof, root.as_bytes(), &key, &value) {
+        Ok(())
+    } else {
+        Err(VerifyError::InvalidTxProof)
     }
-    verify_tx(tx_hash, tx_root, tx_proof)?;
-    verify_receipt(msg, receipt, receipt_root, receipt_proof)
 }
 
-fn verify_tx(tx_hash: H256, root: H256, proof: Vec<H256>) -> Result<(), VerifyError> {
-    let proof = proof.into_iter().map(|h| h.as_bytes().to_vec());
-    Ok(())
-}
-
-// Get the frist log as IcsComponent.
-fn verify_receipt<I: Object>(
-    expect: I,
+fn verify_receipt<O: Object>(
+    expect: O,
     receipt: TransactionReceipt,
     root: MerkleRoot,
     proof: Vec<Vec<u8>>,
+    idx: u64,
 ) -> Result<(), VerifyError> {
-    // let actual = receipt
-    //     .logs
-    //     .into_iter()
-    //     .next()
-    //     .ok_or(VerifyError::FoundNoMessage)?;
+    let actual = receipt
+        .logs
+        .iter()
+        .next()
+        .ok_or(VerifyError::FoundNoMessage)?;
 
-    // if expect.encode() != actual.data {
-    //     return Err(VerifyError::EventNotMatch);
-    // }
+    if expect.encode() != actual.data.as_ref() {
+        return Err(VerifyError::EventNotMatch);
+    }
 
-    // let key = expect.as_key();
+    let key: Vec<u8> = rlp::encode(&idx).as_ref().into();
 
-    // trie::verify_proof(root.as_bytes(), key, proof, HasherKeccak::new())
-    //     .map_err(|_| VerifyError::InvalidReceiptProof)?;
-
-    Ok(())
+    if verify_proof(&proof, root.as_ref(), &key, receipt.rlp_bytes().as_ref()) {
+        Ok(())
+    } else {
+        Err(VerifyError::InvalidReceiptProof)
+    }
 }

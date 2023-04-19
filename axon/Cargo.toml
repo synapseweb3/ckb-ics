@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 # ethers-core = "2.0"
 # axon-protocol ={ git = "https://github.com/axonweb3/axon.git", tag = "v0.1.0-alpha.8"}
-rlp = "0.5.2"
-rlp-derive = "0.1.0"
+rlp = {version = "0.5.2", default-features = false}
+rlp-derive = {version = "0.1.0", default-features = false}
 cstr_core = "0.2.6"
 
 ethereum-types = {version = "0.14.1", default-features = false, features= ["ethbloom", "rlp"]}

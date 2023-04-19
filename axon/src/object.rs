@@ -1,4 +1,5 @@
 use crate::proof::ObjectProof;
+use alloc::vec::Vec;
 
 // use axon_protocol::types::{Bytes, U256};
 use super::Bytes;
@@ -7,9 +8,7 @@ use cstr_core::CString;
 
 // ChannelEnd, ConnectionEnd
 pub trait Object {
-    fn encode(&self) -> Bytes;
-
-    fn as_key(&self) -> &[u8];
+    fn encode(&self) -> Vec<u8>;
 }
 
 pub enum VerifyError {
@@ -77,11 +76,7 @@ pub struct ClientState {
 }
 
 impl Object for ClientState {
-    fn encode(&self) -> Bytes {
-        todo!()
-    }
-
-    fn as_key(&self) -> &[u8] {
+    fn encode(&self) -> Vec<u8> {
         todo!()
     }
 }
@@ -102,11 +97,7 @@ pub struct ConnectionEnd {
 }
 
 impl Object for ConnectionEnd {
-    fn encode(&self) -> Bytes {
-        todo!()
-    }
-
-    fn as_key(&self) -> &[u8] {
+    fn encode(&self) -> Vec<u8> {
         todo!()
     }
 }
@@ -121,11 +112,7 @@ pub struct ChannelEnd {
 }
 
 impl Object for ChannelEnd {
-    fn encode(&self) -> Bytes {
-        todo!()
-    }
-
-    fn as_key(&self) -> &[u8] {
+    fn encode(&self) -> Vec<u8> {
         todo!()
     }
 }
