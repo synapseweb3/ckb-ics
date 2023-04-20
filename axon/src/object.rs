@@ -19,6 +19,8 @@ pub enum VerifyError {
     TxReceiptNotMatch,
     SerdeError,
 
+    WrongClient,
+
     ConnectionsWrong,
 
     WrongConnectionCnt,

@@ -12,6 +12,7 @@ use crate::verify_object;
 use super::Bytes;
 use super::Vec;
 
+use cstr_core::CString;
 use rlp::{Decodable, Encodable};
 
 use super::object::ConnectionEnd;
@@ -36,7 +37,9 @@ impl Decodable for IbcConnections {
     }
 }
 
-pub struct Client {}
+pub struct Client {
+    pub id: CString,
+}
 
 impl Client {
     pub fn verify_block(&self, block: Block) -> Result<(), VerifyError> {
@@ -57,7 +60,7 @@ impl Decodable for Client {
 }
 
 pub fn handle_msg_connection_open_init(
-    _: Client,
+    client: Client,
     old_connections: IbcConnections,
     new_connections: IbcConnections,
     msg: MsgConnectionOpenInit,
@@ -75,6 +78,9 @@ pub fn handle_msg_connection_open_init(
     }
 
     let connection = new_connections.connections.last().unwrap();
+    if connection.client_id != client.id {
+        return Err(VerifyError::WrongClient);
+    }
 
     if connection.state != State::Init {
         return Err(VerifyError::WrongConnectionState);
@@ -110,6 +116,9 @@ pub fn handle_msg_connection_open_try(
     }
 
     let connection = new_connections.connections.last().unwrap();
+    if connection.client_id != connection.client_id {
+        return Err(VerifyError::WrongClient);
+    }
 
     if connection.state != State::OpenTry {
         return Err(VerifyError::WrongConnectionState);
