@@ -19,7 +19,7 @@ pub enum VerifyError {
     TxReceiptNotMatch,
     SerdeError,
 
-    ClientFrozen,
+    ConnectionsWrong,
 
     WrongConnectionCnt,
     WrongConnectionState,
@@ -51,7 +51,7 @@ pub enum Ordering {
     Ordered,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ConnectionId {
     pub client_id: CString,
     pub connection_id: Option<CString>,
@@ -98,6 +98,7 @@ pub struct ConsensusState {
     pub extra_payload: Bytes,
 }
 
+#[derive(PartialEq, Eq)]
 pub struct ConnectionEnd {
     pub connection_id: ConnectionId,
     pub state: State,

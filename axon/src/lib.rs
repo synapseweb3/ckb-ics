@@ -14,6 +14,7 @@ pub mod verify_mpt;
 // use axon_protocol::types::{Hash, MerkleRoot, Receipt};
 // use hasher::HasherKeccak;
 use ethereum_types::H256;
+use handler::Client;
 use object::{Object, VerifyError};
 use proof::{ObjectProof, Transaction, TransactionReceipt};
 use rlp::Encodable;
@@ -22,7 +23,11 @@ use verify_mpt::verify_proof;
 pub type U256 = Vec<u8>;
 pub type Bytes = Vec<u8>;
 
-pub fn verify_object<O: Object>(object: O, object_proof: ObjectProof) -> Result<(), VerifyError> {
+pub fn verify_object<O: Object>(
+    client: Client,
+    object: O,
+    object_proof: ObjectProof,
+) -> Result<(), VerifyError> {
     verify_message(
         object_proof.tx_root,
         object_proof.tx_proof,
@@ -32,7 +37,8 @@ pub fn verify_object<O: Object>(object: O, object_proof: ObjectProof) -> Result<
         object,
         object_proof.idx,
         object_proof.receipt_proof,
-    )
+    )?;
+    client.verify_block(object_proof.block)
 }
 
 fn verify_message<O: Object>(

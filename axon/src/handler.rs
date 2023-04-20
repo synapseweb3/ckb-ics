@@ -5,6 +5,7 @@ use crate::message::MsgConnectionOpenTry;
 use crate::object::ConnectionId;
 use crate::object::State;
 use crate::object::VerifyError;
+use crate::proof::Block;
 use crate::verify_object;
 
 // use axon_protocol::types::Bytes;
@@ -35,8 +36,12 @@ impl Decodable for IbcConnections {
     }
 }
 
-pub struct Client {
-    pub state: State,
+pub struct Client {}
+
+impl Client {
+    pub fn verify_block(&self, block: Block) -> Result<(), VerifyError> {
+        todo!()
+    }
 }
 
 impl Encodable for Client {
@@ -52,6 +57,7 @@ impl Decodable for Client {
 }
 
 pub fn handle_msg_connection_open_init(
+    _: Client,
     old_connections: IbcConnections,
     new_connections: IbcConnections,
     msg: MsgConnectionOpenInit,
@@ -60,6 +66,12 @@ pub fn handle_msg_connection_open_init(
         || old_connections.next_connection_number + 1 != new_connections.next_connection_number
     {
         return Err(VerifyError::WrongConnectionCnt);
+    }
+
+    for i in 0..old_connections.connections.len() {
+        if old_connections.connections[i] != new_connections.connections[i] {
+            return Err(VerifyError::ConnectionsWrong);
+        }
     }
 
     let connection = new_connections.connections.last().unwrap();
@@ -80,17 +92,21 @@ pub fn handle_msg_connection_open_init(
 }
 
 pub fn handle_msg_connection_open_try(
+    client: Client,
     old_connections: IbcConnections,
     new_connections: IbcConnections,
     msg: MsgConnectionOpenTry,
 ) -> Result<(), VerifyError> {
-    let a = Vec::<u8>::new();
-    let b: [u8; 32] = a.try_into().unwrap();
-
     if old_connections.connections.len() + 1 != new_connections.connections.len()
         || old_connections.next_connection_number + 1 != new_connections.next_connection_number
     {
         return Err(VerifyError::WrongConnectionCnt);
+    }
+
+    for i in 0..old_connections.connections.len() {
+        if old_connections.connections[i] != new_connections.connections[i] {
+            return Err(VerifyError::ConnectionsWrong);
+        }
     }
 
     let connection = new_connections.connections.last().unwrap();
@@ -115,5 +131,9 @@ pub fn handle_msg_connection_open_try(
 
     let object_proof = msg.proof.object_proof;
 
-    verify_object(expected_connection_end_on_counterparty, object_proof)
+    verify_object(
+        client,
+        expected_connection_end_on_counterparty,
+        object_proof,
+    )
 }

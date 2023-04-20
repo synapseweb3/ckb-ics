@@ -1,8 +1,8 @@
 // Reference to ehters-core
 use alloc::vec::Vec;
 use cstr_core::CString;
-use ethereum_types::{Address, Bloom, H256, U256, U64};
-use rlp::{Encodable, RlpStream};
+use ethereum_types::{Address, Bloom, H256, H64, U256, U64};
+use rlp::{Decodable, Encodable, RlpStream};
 use rlp_derive::{RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWrapper};
 
 pub struct ObjectProof {
@@ -16,6 +16,61 @@ pub struct ObjectProof {
 
     // the transaction idx in the block
     pub idx: u64,
+
+    pub block: Block,
+}
+
+pub struct Block {
+    /// Hash of the block
+    pub hash: Option<H256>,
+    /// Hash of the parent
+    pub parent_hash: H256,
+    /// Hash of the uncles
+    pub uncles_hash: H256,
+    /// Miner/author's address. None if pending.
+    pub author: Option<Address>,
+    /// State root hash
+    pub state_root: H256,
+    /// Transactions root hash
+    pub transactions_root: H256,
+    /// Transactions receipts root hash
+    pub receipts_root: H256,
+    /// Block number. None if pending.
+    pub number: Option<U64>,
+    /// Gas Used
+    pub gas_used: U256,
+    /// Gas Limit
+    pub gas_limit: U256,
+    /// Extra data
+    pub extra_data: Bytes,
+    /// Logs bloom
+    pub logs_bloom: Option<Bloom>,
+    /// Timestamp
+    pub timestamp: U256,
+    /// Difficulty
+    pub difficulty: U256,
+    /// Total difficulty
+    pub total_difficulty: Option<U256>,
+    /// Seal fields
+    pub seal_fields: Vec<Bytes>,
+    /// Uncles' hashes
+    pub uncles: Vec<H256>,
+    /// Transactions
+    pub transactions: Vec<Transaction>,
+    /// Size in bytes
+    pub size: Option<U256>,
+    /// Mix Hash
+    pub mix_hash: Option<H256>,
+    /// Nonce
+    pub nonce: Option<H64>,
+    /// Base fee per unit of gas (if past London)
+    pub base_fee_per_gas: Option<U256>,
+}
+
+impl Decodable for Block {
+    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        todo!()
+    }
 }
 
 pub struct Transaction {
