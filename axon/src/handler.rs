@@ -1,5 +1,6 @@
 // These structs should only be used in CKB contracts.
 
+use crate::message::MsgConnectionOpenAck;
 use crate::message::MsgConnectionOpenInit;
 use crate::message::MsgConnectionOpenTry;
 use crate::object::ConnectionId;
@@ -145,4 +146,118 @@ pub fn handle_msg_connection_open_try(
         expected_connection_end_on_counterparty,
         object_proof,
     )
+}
+
+pub fn handle_msg_connection_open_ack(
+    client: Client,
+    old: IbcConnections,
+    new: IbcConnections,
+    msg: MsgConnectionOpenAck,
+) -> Result<(), VerifyError> {
+    if old.connections.len() != new.connections.len() {
+        return Err(VerifyError::WrongConnectionCnt);
+    }
+    for i in 0..old.connections.len() - 1 {
+        if old.connections[i] != new.connections[i] {
+            return Err(VerifyError::WrongClient);
+        }
+    }
+
+    let old_connection = &old.connections[old.connections.len() - 1];
+    let new_connection = &new.connections[new.connections.len() - 1];
+
+    if old_connection.client_id != new_connection.client_id
+        || old_connection.connection_id != new_connection.connection_id
+        || old_connection.delay_period != old_connection.delay_period
+        || old_connection.counterparty != new_connection.counterparty
+    {
+        return Err(VerifyError::WrongClient);
+    }
+
+    let connection_id = new_connection
+        .connection_id
+        .connection_id
+        .as_ref()
+        .ok_or(VerifyError::ConnectionsWrong)?;
+
+    // TODO: Check message
+    if &msg.connection_id != connection_id || &msg.counterparty_connection_id != connection_id {
+        return Err(VerifyError::ConnectionsWrong);
+    }
+
+    if old_connection.state != State::Init || old_connection.state != State::Open {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    let expected = ConnectionEnd {
+        connection_id: ConnectionId {
+            client_id: new_connection.counterparty.client_id.clone(),
+            connection_id: new_connection.counterparty.connection_id.clone(),
+        },
+        state: State::Open,
+        client_id: new_connection.counterparty.client_id.clone(),
+        counterparty: ConnectionId {
+            client_id: client.id.clone(),
+            connection_id: Some(connection_id.clone()),
+        },
+        delay_period: new_connection.delay_period.clone(),
+    };
+    verify_object(client, expected, msg.proofs.object_proof)
+}
+
+pub fn handle_msg_connection_open_confirm(
+    client: Client,
+    old: IbcConnections,
+    new: IbcConnections,
+    msg: MsgConnectionOpenAck,
+) -> Result<(), VerifyError> {
+    if old.connections.len() != new.connections.len() {
+        return Err(VerifyError::WrongConnectionCnt);
+    }
+    for i in 0..old.connections.len() - 1 {
+        if old.connections[i] != new.connections[i] {
+            return Err(VerifyError::WrongClient);
+        }
+    }
+
+    let old_connection = &old.connections[old.connections.len() - 1];
+    let new_connection = &new.connections[new.connections.len() - 1];
+
+    if old_connection.client_id != new_connection.client_id
+        || old_connection.connection_id != new_connection.connection_id
+        || old_connection.delay_period != old_connection.delay_period
+        || old_connection.counterparty != new_connection.counterparty
+    {
+        return Err(VerifyError::WrongClient);
+    }
+
+    let connection_id = new_connection
+        .connection_id
+        .connection_id
+        .as_ref()
+        .ok_or(VerifyError::ConnectionsWrong)?;
+
+    // TODO: Check message
+    if &msg.connection_id != connection_id || &msg.counterparty_connection_id != connection_id {
+        return Err(VerifyError::ConnectionsWrong);
+    }
+
+    if old_connection.state != State::Init || old_connection.state != State::Open {
+        return Err(VerifyError::WrongConnectionState);
+    }
+    let expected = ConnectionEnd {
+        connection_id: ConnectionId {
+            client_id: new_connection.counterparty.client_id.clone(),
+            connection_id: new_connection.counterparty.connection_id.clone(),
+        },
+        state: State::Open,
+        client_id: new_connection.counterparty.client_id.clone(),
+        counterparty: ConnectionId {
+            client_id: client.id.clone(),
+            connection_id: Some(connection_id.clone()),
+        },
+        delay_period: new_connection.delay_period.clone(),
+    };
+
+    verify_object(client, expected, msg.proofs.object_proof)
 }
