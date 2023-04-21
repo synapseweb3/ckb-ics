@@ -1,9 +1,16 @@
 // These structs should only be used in CKB contracts.
 
+use crate::message::MsgChannelOpenAck;
+use crate::message::MsgChannelOpenConfirm;
+use crate::message::MsgChannelOpenInit;
+use crate::message::MsgChannelOpenTry;
 use crate::message::MsgConnectionOpenAck;
 use crate::message::MsgConnectionOpenInit;
 use crate::message::MsgConnectionOpenTry;
+use crate::object::ChannelEnd;
+use crate::object::ChannelId;
 use crate::object::ConnectionId;
+use crate::object::Ordering;
 use crate::object::State;
 use crate::object::VerifyError;
 use crate::proof::Block;
@@ -13,6 +20,7 @@ use crate::verify_object;
 use super::Bytes;
 use super::Vec;
 
+use alloc::string::ToString;
 use cstr_core::CString;
 use rlp::{Decodable, Encodable};
 
@@ -33,6 +41,62 @@ impl Encodable for IbcConnections {
 }
 
 impl Decodable for IbcConnections {
+    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        todo!()
+    }
+}
+
+pub struct IbcChannel {
+    pub num: u16,
+    pub port_id: CString,
+    pub state: State,
+    pub order: Ordering,
+    pub sequence: Sequence,
+    pub counterparty: ChannelId,
+}
+
+impl IbcChannel {
+    pub fn equal_unless_state(&self, other: &Self) -> bool {
+        if self.num != other.num
+            || self.port_id != other.port_id
+            || self.order != other.order
+            || self.sequence != other.sequence
+            || self.counterparty != other.counterparty
+        {
+            return false;
+        }
+        return true;
+    }
+}
+
+impl Encodable for IbcChannel {
+    fn rlp_append(&self, s: &mut rlp::RlpStream) {
+        todo!()
+    }
+}
+
+impl Decodable for IbcChannel {
+    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        todo!()
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub struct Sequence {
+    pub next_send_packet: u16,
+    pub next_recv_packet: u16,
+    pub next_recv_ack: u16,
+    pub unorder_recv_packet: Vec<u16>,
+    pub unorder_recv_ack: Vec<u16>,
+}
+
+impl Encodable for Sequence {
+    fn rlp_append(&self, s: &mut rlp::RlpStream) {
+        todo!()
+    }
+}
+
+impl Decodable for Sequence {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         todo!()
     }
@@ -260,4 +324,132 @@ pub fn handle_msg_connection_open_confirm(
     };
 
     verify_object(client, expected, msg.proofs.object_proof)
+}
+
+pub fn handle_msg_channel_open_init(
+    client: Client,
+    conn: ConnectionEnd,
+    new: IbcChannel,
+    _msg: MsgChannelOpenInit,
+) -> Result<(), VerifyError> {
+    if conn.client_id != client.id {
+        return Err(VerifyError::WrongConnectionClient);
+    }
+
+    if conn.state != State::Open {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    if new.state != State::Init {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    Ok(())
+}
+
+pub fn handle_msg_channel_open_try(
+    client: Client,
+    conn: ConnectionEnd,
+    new: IbcChannel,
+    msg: MsgChannelOpenTry,
+) -> Result<(), VerifyError> {
+    if conn.client_id != client.id {
+        return Err(VerifyError::WrongConnectionClient);
+    }
+
+    if conn.state != State::Open {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    let object = ChannelEnd {
+        channel_id: ChannelId {
+            port_id: new.counterparty.port_id,
+            channel_id: new.counterparty.channel_id,
+        },
+        state: State::Init,
+        ordering: new.order,
+        remote: ChannelId {
+            port_id: new.port_id,
+            channel_id: CString::new(new.num.to_string()).unwrap(),
+        },
+    };
+
+    verify_object(client, object, msg.proofs.object_proof)
+}
+
+pub fn handle_msg_channel_open_ack(
+    client: Client,
+    conn: ConnectionEnd,
+    old: IbcChannel,
+    new: IbcChannel,
+    msg: MsgChannelOpenAck,
+) -> Result<(), VerifyError> {
+    if conn.client_id != client.id {
+        return Err(VerifyError::WrongConnectionClient);
+    }
+
+    if conn.state != State::Open {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    if !new.equal_unless_state(&old) {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if old.state != State::Init && new.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    let object = ChannelEnd {
+        channel_id: ChannelId {
+            port_id: new.counterparty.port_id,
+            channel_id: new.counterparty.channel_id,
+        },
+        state: State::OpenTry,
+        ordering: new.order,
+        remote: ChannelId {
+            port_id: new.port_id,
+            channel_id: CString::new(new.num.to_string()).unwrap(),
+        },
+    };
+
+    verify_object(client, object, msg.proofs.object_proof)
+}
+
+pub fn handle_msg_channel_open_confirm(
+    client: Client,
+    conn: ConnectionEnd,
+    old: IbcChannel,
+    new: IbcChannel,
+    msg: MsgChannelOpenConfirm,
+) -> Result<(), VerifyError> {
+    if conn.client_id != client.id {
+        return Err(VerifyError::WrongConnectionClient);
+    }
+
+    if conn.state != State::Open {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    if !new.equal_unless_state(&old) {
+        return Err(VerifyError::WrongChannel);
+    }
+    if old.state != State::OpenTry && new.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    let object = ChannelEnd {
+        channel_id: ChannelId {
+            port_id: new.counterparty.port_id,
+            channel_id: new.counterparty.channel_id,
+        },
+        state: State::OpenTry,
+        ordering: new.order,
+        remote: ChannelId {
+            port_id: new.port_id,
+            channel_id: CString::new(new.num.to_string()).unwrap(),
+        },
+    };
+
+    verify_object(client, object, msg.proofs.object_proof)
 }

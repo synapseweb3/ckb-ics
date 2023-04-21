@@ -27,6 +27,9 @@ pub enum VerifyError {
     WrongConnectionState,
     WrongConnectionCounterparty,
     WrongConnectionClient,
+
+    WrongChannelState,
+    WrongChannel,
 }
 
 pub enum ClientType {
@@ -47,6 +50,7 @@ pub enum State {
     Frozen,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum Ordering {
     Unknown,
     Unordered,
@@ -60,6 +64,7 @@ pub struct ConnectionId {
     // pub commitment_prefix: Bytes,
 }
 
+#[derive(PartialEq, Eq)]
 pub struct ChannelId {
     pub port_id: CString,
     pub channel_id: CString,
