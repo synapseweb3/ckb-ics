@@ -1,15 +1,18 @@
 // These structs should only be used in CKB contracts.
 
+use crate::message::Envelope;
 use crate::message::MsgChannelOpenAck;
 use crate::message::MsgChannelOpenConfirm;
 use crate::message::MsgChannelOpenInit;
 use crate::message::MsgChannelOpenTry;
 use crate::message::MsgConnectionOpenAck;
+use crate::message::MsgConnectionOpenConfirm;
 use crate::message::MsgConnectionOpenInit;
 use crate::message::MsgConnectionOpenTry;
+use crate::message::MsgType;
+use crate::object::ChannelCounterparty;
 use crate::object::ChannelEnd;
-use crate::object::ChannelId;
-use crate::object::ConnectionId;
+use crate::object::ConnectionCounterparty;
 use crate::object::Ordering;
 use crate::object::State;
 use crate::object::VerifyError;
@@ -22,7 +25,7 @@ use super::Vec;
 
 use alloc::string::ToString;
 use cstr_core::CString;
-use rlp::{Decodable, Encodable};
+use rlp::{decode, Decodable, Encodable};
 
 use super::object::ConnectionEnd;
 
@@ -52,7 +55,8 @@ pub struct IbcChannel {
     pub state: State,
     pub order: Ordering,
     pub sequence: Sequence,
-    pub counterparty: ChannelId,
+    pub counterparty: ChannelCounterparty,
+    pub connection_hops: Vec<usize>,
 }
 
 impl IbcChannel {
@@ -151,14 +155,6 @@ pub fn handle_msg_connection_open_init(
         return Err(VerifyError::WrongConnectionState);
     }
 
-    if connection.counterparty.client_id != msg.counterparty.client_id {
-        return Err(VerifyError::WrongConnectionCounterparty);
-    }
-
-    if connection.client_id != msg.client_id {
-        return Err(VerifyError::WrongConnectionClient);
-    }
-
     Ok(())
 }
 
@@ -190,15 +186,11 @@ pub fn handle_msg_connection_open_try(
     }
 
     let expected_connection_end_on_counterparty = ConnectionEnd {
-        connection_id: ConnectionId {
-            client_id: msg.counterparty.client_id.clone(),
-            connection_id: msg.counterparty.connection_id.clone(),
-        },
         state: State::Init,
         client_id: msg.counterparty.client_id.clone(),
-        counterparty: ConnectionId {
-            client_id: msg.client_id.clone(),
-            connection_id: Some(msg.previous_connection_id.clone()),
+        counterparty: ConnectionCounterparty {
+            client_id: client.id.clone(),
+            connection_id: None,
         },
         delay_period: msg.delay_period.clone(),
     };
@@ -221,104 +213,75 @@ pub fn handle_msg_connection_open_ack(
     if old.connections.len() != new.connections.len() {
         return Err(VerifyError::WrongConnectionCnt);
     }
-    for i in 0..old.connections.len() - 1 {
-        if old.connections[i] != new.connections[i] {
+
+    let conn_idx = msg.conn_id_on_a;
+    for i in 0..old.connections.len() {
+        if i != conn_idx && old.connections[i] != new.connections[i] {
             return Err(VerifyError::WrongClient);
         }
     }
 
-    let old_connection = &old.connections[old.connections.len() - 1];
-    let new_connection = &new.connections[new.connections.len() - 1];
+    let old_connection = &old.connections[conn_idx];
+    let new_connection = &new.connections[conn_idx];
 
     if old_connection.client_id != new_connection.client_id
-        || old_connection.connection_id != new_connection.connection_id
         || old_connection.delay_period != old_connection.delay_period
         || old_connection.counterparty != new_connection.counterparty
     {
         return Err(VerifyError::WrongClient);
     }
 
-    let connection_id = new_connection
-        .connection_id
-        .connection_id
-        .as_ref()
-        .ok_or(VerifyError::ConnectionsWrong)?;
-
-    // TODO: Check message
-    if &msg.connection_id != connection_id || &msg.counterparty_connection_id != connection_id {
-        return Err(VerifyError::ConnectionsWrong);
-    }
-
-    if old_connection.state != State::Init || old_connection.state != State::Open {
+    if old_connection.state != State::Init || new_connection.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
     }
 
     let expected = ConnectionEnd {
-        connection_id: ConnectionId {
-            client_id: new_connection.counterparty.client_id.clone(),
-            connection_id: new_connection.counterparty.connection_id.clone(),
-        },
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
-        counterparty: ConnectionId {
+        counterparty: ConnectionCounterparty {
             client_id: client.id.clone(),
-            connection_id: Some(connection_id.clone()),
+            connection_id: Some(CString::new(conn_idx.to_string()).unwrap()),
         },
         delay_period: new_connection.delay_period.clone(),
     };
-    verify_object(client, expected, msg.proofs.object_proof)
+    verify_object(client, expected, msg.proof_conn_end_on_b.object_proof)
 }
 
 pub fn handle_msg_connection_open_confirm(
     client: Client,
     old: IbcConnections,
     new: IbcConnections,
-    msg: MsgConnectionOpenAck,
+    msg: MsgConnectionOpenConfirm,
 ) -> Result<(), VerifyError> {
     if old.connections.len() != new.connections.len() {
         return Err(VerifyError::WrongConnectionCnt);
     }
-    for i in 0..old.connections.len() - 1 {
-        if old.connections[i] != new.connections[i] {
+
+    let conn_idx = msg.conn_id_on_b;
+    for i in 0..old.connections.len() {
+        if i != conn_idx && old.connections[i] != new.connections[i] {
             return Err(VerifyError::WrongClient);
         }
     }
 
-    let old_connection = &old.connections[old.connections.len() - 1];
-    let new_connection = &new.connections[new.connections.len() - 1];
+    let old_connection = &old.connections[conn_idx];
+    let new_connection = &new.connections[conn_idx];
 
     if old_connection.client_id != new_connection.client_id
-        || old_connection.connection_id != new_connection.connection_id
         || old_connection.delay_period != old_connection.delay_period
         || old_connection.counterparty != new_connection.counterparty
     {
         return Err(VerifyError::WrongClient);
     }
-
-    let connection_id = new_connection
-        .connection_id
-        .connection_id
-        .as_ref()
-        .ok_or(VerifyError::ConnectionsWrong)?;
-
-    // TODO: Check message
-    if &msg.connection_id != connection_id || &msg.counterparty_connection_id != connection_id {
-        return Err(VerifyError::ConnectionsWrong);
-    }
-
     if old_connection.state != State::Init || old_connection.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
     }
     let expected = ConnectionEnd {
-        connection_id: ConnectionId {
-            client_id: new_connection.counterparty.client_id.clone(),
-            connection_id: new_connection.counterparty.connection_id.clone(),
-        },
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
-        counterparty: ConnectionId {
+        counterparty: ConnectionCounterparty {
             client_id: client.id.clone(),
-            connection_id: Some(connection_id.clone()),
+            connection_id: Some(CString::new(conn_idx.to_string()).unwrap()),
         },
         delay_period: new_connection.delay_period.clone(),
     };
@@ -326,9 +289,37 @@ pub fn handle_msg_connection_open_confirm(
     verify_object(client, expected, msg.proofs.object_proof)
 }
 
+pub fn handle_channel_open_init_and_try(
+    client: Client,
+    channel: IbcChannel,
+    envelop: Envelope,
+    old_connections: IbcConnections,
+    new_connections: IbcConnections,
+) -> Result<(), VerifyError> {
+    let connection_idx = channel.connection_hops[0];
+    if old_connections.next_channel_number + 1 != new_connections.next_channel_number {
+        return Err(VerifyError::WrongConnectionNextChannelNumber);
+    }
+    let new_connection_end = &new_connections.connections[connection_idx];
+
+    match envelop.msg_type {
+        MsgType::MsgChannelOpenInit => {
+            let init_msg = decode::<MsgChannelOpenInit>(&envelop.content)
+                .map_err(|_| VerifyError::SerdeError)?;
+            handle_msg_channel_open_init(client, new_connection_end, channel, init_msg)
+        }
+        MsgType::MsgChannelOpenTry => {
+            let open_try_msg = decode::<MsgChannelOpenTry>(&envelop.content)
+                .map_err(|_| VerifyError::SerdeError)?;
+            handle_msg_channel_open_try(client, new_connection_end, channel, open_try_msg)
+        }
+        _ => Err(VerifyError::EventNotMatch),
+    }
+}
+
 pub fn handle_msg_channel_open_init(
     client: Client,
-    conn: ConnectionEnd,
+    conn: &ConnectionEnd,
     new: IbcChannel,
     _msg: MsgChannelOpenInit,
 ) -> Result<(), VerifyError> {
@@ -349,7 +340,7 @@ pub fn handle_msg_channel_open_init(
 
 pub fn handle_msg_channel_open_try(
     client: Client,
-    conn: ConnectionEnd,
+    conn: &ConnectionEnd,
     new: IbcChannel,
     msg: MsgChannelOpenTry,
 ) -> Result<(), VerifyError> {
@@ -362,36 +353,45 @@ pub fn handle_msg_channel_open_try(
     }
 
     let object = ChannelEnd {
-        channel_id: ChannelId {
-            port_id: new.counterparty.port_id,
-            channel_id: new.counterparty.channel_id,
-        },
         state: State::Init,
         ordering: new.order,
-        remote: ChannelId {
+        remote: ChannelCounterparty {
             port_id: new.port_id,
             channel_id: CString::new(new.num.to_string()).unwrap(),
         },
+        connection_hops: msg.connection_hops_on_a,
     };
 
-    verify_object(client, object, msg.proofs.object_proof)
+    verify_object(client, object, msg.proof_chan_end_on_a.object_proof)
+}
+
+pub fn handle_channel_open_ack_and_confirm(
+    client: Client,
+    envelope: Envelope,
+    old_channel: IbcChannel,
+    new_channel: IbcChannel,
+) -> Result<(), VerifyError> {
+    match envelope.msg_type {
+        MsgType::MsgChannelOpenAck => {
+            let msg = decode::<MsgChannelOpenAck>(&envelope.content)
+                .map_err(|_| VerifyError::SerdeError)?;
+            handle_msg_channel_open_ack(client, old_channel, new_channel, msg)
+        }
+        MsgType::MsgChannelOpenConfirm => {
+            let msg = decode::<MsgChannelOpenConfirm>(&envelope.content)
+                .map_err(|_| VerifyError::SerdeError)?;
+            handle_msg_channel_open_confirm(client, old_channel, new_channel, msg)
+        }
+        _ => Err(VerifyError::EventNotMatch),
+    }
 }
 
 pub fn handle_msg_channel_open_ack(
     client: Client,
-    conn: ConnectionEnd,
     old: IbcChannel,
     new: IbcChannel,
     msg: MsgChannelOpenAck,
 ) -> Result<(), VerifyError> {
-    if conn.client_id != client.id {
-        return Err(VerifyError::WrongConnectionClient);
-    }
-
-    if conn.state != State::Open {
-        return Err(VerifyError::WrongConnectionState);
-    }
-
     if !new.equal_unless_state(&old) {
         return Err(VerifyError::WrongChannel);
     }
@@ -401,16 +401,13 @@ pub fn handle_msg_channel_open_ack(
     }
 
     let object = ChannelEnd {
-        channel_id: ChannelId {
-            port_id: new.counterparty.port_id,
-            channel_id: new.counterparty.channel_id,
-        },
         state: State::OpenTry,
         ordering: new.order,
-        remote: ChannelId {
+        remote: ChannelCounterparty {
             port_id: new.port_id,
             channel_id: CString::new(new.num.to_string()).unwrap(),
         },
+        connection_hops: msg.connection_hops_on_b,
     };
 
     verify_object(client, object, msg.proofs.object_proof)
@@ -418,19 +415,10 @@ pub fn handle_msg_channel_open_ack(
 
 pub fn handle_msg_channel_open_confirm(
     client: Client,
-    conn: ConnectionEnd,
     old: IbcChannel,
     new: IbcChannel,
     msg: MsgChannelOpenConfirm,
 ) -> Result<(), VerifyError> {
-    if conn.client_id != client.id {
-        return Err(VerifyError::WrongConnectionClient);
-    }
-
-    if conn.state != State::Open {
-        return Err(VerifyError::WrongConnectionState);
-    }
-
     if !new.equal_unless_state(&old) {
         return Err(VerifyError::WrongChannel);
     }
@@ -439,16 +427,13 @@ pub fn handle_msg_channel_open_confirm(
     }
 
     let object = ChannelEnd {
-        channel_id: ChannelId {
-            port_id: new.counterparty.port_id,
-            channel_id: new.counterparty.channel_id,
-        },
         state: State::OpenTry,
         ordering: new.order,
-        remote: ChannelId {
+        remote: ChannelCounterparty {
             port_id: new.port_id,
             channel_id: CString::new(new.num.to_string()).unwrap(),
         },
+        connection_hops: msg.connection_hops_on_b,
     };
 
     verify_object(client, object, msg.proofs.object_proof)

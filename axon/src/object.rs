@@ -27,6 +27,7 @@ pub enum VerifyError {
     WrongConnectionState,
     WrongConnectionCounterparty,
     WrongConnectionClient,
+    WrongConnectionNextChannelNumber,
 
     WrongChannelState,
     WrongChannel,
@@ -58,14 +59,14 @@ pub enum Ordering {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct ConnectionId {
+pub struct ConnectionCounterparty {
     pub client_id: CString,
     pub connection_id: Option<CString>,
     // pub commitment_prefix: Bytes,
 }
 
 #[derive(PartialEq, Eq)]
-pub struct ChannelId {
+pub struct ChannelCounterparty {
     pub port_id: CString,
     pub channel_id: CString,
 }
@@ -77,7 +78,7 @@ pub struct Proofs {
 }
 
 pub struct Packet {
-    pub sequence: U256,
+    pub sequence: u64,
     pub source_port_id: CString,
     pub source_channel_id: CString,
     pub destination_port_id: CString,
@@ -107,12 +108,11 @@ pub struct ConsensusState {
 
 #[derive(PartialEq, Eq)]
 pub struct ConnectionEnd {
-    pub connection_id: ConnectionId,
     pub state: State,
     pub client_id: CString,
-    pub counterparty: ConnectionId,
+    pub counterparty: ConnectionCounterparty,
+    pub delay_period: u64,
     // pub versions: Vec<String>,
-    pub delay_period: U256,
 }
 
 impl Object for ConnectionEnd {
@@ -122,16 +122,19 @@ impl Object for ConnectionEnd {
 }
 
 pub struct ChannelEnd {
-    pub channel_id: ChannelId,
     pub state: State,
     pub ordering: Ordering,
-    pub remote: ChannelId,
-    // pub connection_hops: Vec<String>,
-    // pub version: String,
+    pub remote: ChannelCounterparty,
+    pub connection_hops: Vec<CString>,
+    // pub version: CString,
 }
 
 impl Object for ChannelEnd {
     fn encode(&self) -> Vec<u8> {
         todo!()
     }
+}
+
+fn tes() {
+    let v = Vec::<ChannelEnd>::new();
 }

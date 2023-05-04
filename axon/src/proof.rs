@@ -68,7 +68,7 @@ pub struct Block {
 }
 
 impl Decodable for Block {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+    fn decode(_: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         todo!()
     }
 }
@@ -187,9 +187,6 @@ impl Transaction {
                 rlp.append(&self.nonce);
                 rlp_opt(&mut rlp, &self.gas_price);
                 rlp.append(&self.gas);
-
-                #[cfg(feature = "celo")]
-                self.inject_celo_metadata(&mut rlp);
 
                 rlp_opt(&mut rlp, &self.to);
                 rlp.append(&self.value);
