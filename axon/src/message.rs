@@ -319,6 +319,11 @@ impl Decodable for MsgChannelCloseConfirm {
     }
 }
 
+// todo: Explain this
+pub struct MsgSendPacket {
+    pub packet: Packet,
+}
+
 pub struct MsgRecvPacket {
     pub packet: Packet,
     pub proofs: Proofs,
