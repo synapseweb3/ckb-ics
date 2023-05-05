@@ -14,6 +14,7 @@ use crate::object::ChannelCounterparty;
 use crate::object::ChannelEnd;
 use crate::object::ConnectionCounterparty;
 use crate::object::Ordering;
+use crate::object::Packet;
 use crate::object::State;
 use crate::object::VerifyError;
 use crate::proof::Block;
@@ -25,6 +26,7 @@ use super::Vec;
 
 use alloc::string::ToString;
 use cstr_core::CString;
+use ethereum_types::H256;
 use rlp::{decode, Decodable, Encodable};
 
 use super::object::ConnectionEnd;
@@ -80,6 +82,26 @@ impl Encodable for IbcChannel {
 }
 
 impl Decodable for IbcChannel {
+    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        todo!()
+    }
+}
+
+pub struct IbcPacket {
+    pub packet: Packet,
+    pub tx_hash: H256,
+    pub status: PacketStatus,
+}
+
+pub enum PacketStatus {}
+
+impl Encodable for IbcPacket {
+    fn rlp_append(&self, s: &mut rlp::RlpStream) {
+        todo!()
+    }
+}
+
+impl Decodable for IbcPacket {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         todo!()
     }

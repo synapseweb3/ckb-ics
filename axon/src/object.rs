@@ -83,9 +83,9 @@ pub struct Packet {
     pub source_channel_id: CString,
     pub destination_port_id: CString,
     pub destination_channel_id: CString,
-    pub payload: Bytes,
+    pub data: Bytes,
     pub timeout_height: Bytes, // bytes32
-    pub timeout_timestamp: U256,
+    pub timeout_timestamp: u64,
 }
 
 pub struct ClientState {
@@ -133,8 +133,4 @@ impl Object for ChannelEnd {
     fn encode(&self) -> Vec<u8> {
         todo!()
     }
-}
-
-fn tes() {
-    let v = Vec::<ChannelEnd>::new();
 }
