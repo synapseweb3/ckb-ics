@@ -31,6 +31,8 @@ pub enum VerifyError {
 
     WrongChannelState,
     WrongChannel,
+
+    WrongPacketSequence,
 }
 
 pub enum ClientType {
@@ -78,7 +80,7 @@ pub struct Proofs {
 }
 
 pub struct Packet {
-    pub sequence: u64,
+    pub sequence: u16,
     pub source_port_id: CString,
     pub source_channel_id: CString,
     pub destination_port_id: CString,
@@ -86,6 +88,12 @@ pub struct Packet {
     pub data: Bytes,
     pub timeout_height: Bytes, // bytes32
     pub timeout_timestamp: u64,
+}
+
+impl Object for Packet {
+    fn encode(&self) -> Vec<u8> {
+        todo!()
+    }
 }
 
 pub struct ClientState {

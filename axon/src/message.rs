@@ -38,6 +38,7 @@ pub enum MsgType {
     MsgChannelOpenConfirm,
     MsgChannelCloseInit,
     MsgChannelCloseConfirm,
+    MsgSendPacket,
     MsgRecvPacket,
     MsgAckPacket,
     MsgTimeoutPacket,
@@ -322,6 +323,18 @@ impl Decodable for MsgChannelCloseConfirm {
 // todo: Explain this
 pub struct MsgSendPacket {
     pub packet: Packet,
+}
+
+impl Encodable for MsgSendPacket {
+    fn rlp_append(&self, s: &mut rlp::RlpStream) {
+        todo!()
+    }
+}
+
+impl Decodable for MsgSendPacket {
+    fn decode(rlp: &Rlp) -> Result<Self, rlp::DecoderError> {
+        todo!()
+    }
 }
 
 pub struct MsgRecvPacket {

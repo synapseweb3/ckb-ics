@@ -9,6 +9,8 @@ use crate::message::MsgConnectionOpenAck;
 use crate::message::MsgConnectionOpenConfirm;
 use crate::message::MsgConnectionOpenInit;
 use crate::message::MsgConnectionOpenTry;
+use crate::message::MsgRecvPacket;
+use crate::message::MsgSendPacket;
 use crate::message::MsgType;
 use crate::object::ChannelCounterparty;
 use crate::object::ChannelEnd;
@@ -73,6 +75,18 @@ impl IbcChannel {
         }
         return true;
     }
+
+    pub fn equal_unless_sequence(&self, other: &Self) -> bool {
+        if self.num != other.num
+            || self.port_id != other.port_id
+            || self.order != other.order
+            || self.state != other.state
+            || self.counterparty != other.counterparty
+        {
+            return false;
+        }
+        return true;
+    }
 }
 
 impl Encodable for IbcChannel {
@@ -114,6 +128,78 @@ pub struct Sequence {
     pub next_recv_ack: u16,
     pub unorder_recv_packet: Vec<u16>,
     pub unorder_recv_ack: Vec<u16>,
+}
+
+impl Sequence {
+    pub fn next_send_packet_is(&self, new: &Self) -> bool {
+        if self.next_send_packet + 1 != new.next_send_packet {
+            return false;
+        }
+
+        if self.next_recv_packet != new.next_recv_packet {
+            return false;
+        }
+
+        if self.next_recv_ack != new.next_recv_ack {
+            return false;
+        }
+
+        if self.unorder_recv_packet.len() != new.unorder_recv_packet.len() {
+            return false;
+        }
+
+        for i in 0..self.unorder_recv_packet.len() {
+            if self.unorder_recv_packet[i] != new.unorder_recv_packet[i] {
+                return false;
+            }
+        }
+
+        if self.unorder_recv_ack.len() != new.unorder_recv_packet.len() {
+            return false;
+        }
+
+        for j in 0..self.unorder_recv_ack.len() {
+            if self.unorder_recv_ack[j] != new.unorder_recv_ack[j] {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn next_recv_packer_is(&self, new: &Self) -> bool {
+        if self.next_send_packet != new.next_send_packet {
+            return false;
+        }
+
+        if self.next_recv_packet + 1 != new.next_recv_packet {
+            return false;
+        }
+
+        if self.next_recv_ack != new.next_recv_ack {
+            return false;
+        }
+
+        if self.unorder_recv_packet.len() != new.unorder_recv_packet.len() {
+            return false;
+        }
+
+        for i in 0..self.unorder_recv_packet.len() {
+            if self.unorder_recv_packet[i] != new.unorder_recv_packet[i] {
+                return false;
+            }
+        }
+
+        if self.unorder_recv_ack.len() != new.unorder_recv_packet.len() {
+            return false;
+        }
+
+        for j in 0..self.unorder_recv_ack.len() {
+            if self.unorder_recv_ack[j] != new.unorder_recv_ack[j] {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 impl Encodable for Sequence {
@@ -459,4 +545,59 @@ pub fn handle_msg_channel_open_confirm(
     };
 
     verify_object(client, object, msg.proofs.object_proof)
+}
+
+pub fn handle_msg_send_packet(
+    _: Client,
+    old_channel: IbcChannel,
+    new_channel: IbcChannel,
+    msg: MsgSendPacket,
+) -> Result<(), VerifyError> {
+    if !old_channel.equal_unless_sequence(&new_channel) {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if old_channel
+        .sequence
+        .next_send_packet_is(&new_channel.sequence)
+    {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if new_channel.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    if msg.packet.sequence != new_channel.sequence.next_send_packet {
+        return Err(VerifyError::WrongPacketSequence);
+    }
+
+    return Ok(());
+}
+
+pub fn handle_msg_recv_packet(
+    client: Client,
+    old_channel: IbcChannel,
+    new_channel: IbcChannel,
+    msg: MsgRecvPacket,
+) -> Result<(), VerifyError> {
+    if !old_channel.equal_unless_sequence(&new_channel) {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if !old_channel
+        .sequence
+        .next_recv_packer_is(&new_channel.sequence)
+    {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if new_channel.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    if msg.packet.sequence != new_channel.sequence.next_recv_packet {
+        return Err(VerifyError::WrongPacketSequence);
+    }
+    verify_object(client, msg.packet, msg.proofs.object_proof)
 }
