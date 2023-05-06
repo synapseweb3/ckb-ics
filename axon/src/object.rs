@@ -33,6 +33,8 @@ pub enum VerifyError {
     WrongChannel,
 
     WrongPacketSequence,
+    WrongPacketStatus,
+    WrongPacketContent,
 }
 
 pub enum ClientType {
@@ -79,6 +81,7 @@ pub struct Proofs {
     pub client_proof: Vec<u8>,
 }
 
+#[derive(PartialEq, Eq)]
 pub struct Packet {
     pub sequence: u16,
     pub source_port_id: CString,

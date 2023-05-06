@@ -45,9 +45,9 @@ pub enum MsgType {
     MsgRecvPacket,
     MsgAckPacket,
     // Business side sends this message after handling MsgRecvPacket
-    MsgOutboxAckPacket,
+    MsgAckOutboxPacket,
     // Business side sends this message after handling MsgAckPacket
-    MsgInboxAckPacket,
+    MsgAckInboxPacket,
     // Relayer side sends this message after
     // the packet is finsihed and they could get back their capacity
     MsgFinishPacket,
@@ -400,8 +400,30 @@ impl Decodable for MsgTimeoutPacket {
 // Business side sends this message after handling MsgAckPacket
 pub struct MsgAckInboxPacket {}
 
+impl Encodable for MsgAckInboxPacket {
+    fn rlp_append(&self, _: &mut rlp::RlpStream) {}
+}
+
+impl Decodable for MsgAckInboxPacket {
+    fn decode(_: &Rlp) -> Result<Self, rlp::DecoderError> {
+        Ok(MsgAckInboxPacket {})
+    }
+}
+
 // Business side sends this message after handling MsgRecvPacket
 pub struct MsgAckOutboxPacket {
     pub ack: Vec<u8>,
-    pub packet: Packet,
+    // pub packet: Packet,
+}
+
+impl Encodable for MsgAckOutboxPacket {
+    fn rlp_append(&self, s: &mut rlp::RlpStream) {
+        todo!()
+    }
+}
+
+impl Decodable for MsgAckOutboxPacket {
+    fn decode(rlp: &Rlp) -> Result<Self, rlp::DecoderError> {
+        todo!()
+    }
 }

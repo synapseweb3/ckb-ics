@@ -1,6 +1,7 @@
 // These structs should only be used in CKB contracts.
 
 use crate::message::Envelope;
+use crate::message::MsgAckOutboxPacket;
 use crate::message::MsgAckPacket;
 use crate::message::MsgChannelOpenAck;
 use crate::message::MsgChannelOpenConfirm;
@@ -109,7 +110,14 @@ pub struct IbcPacket {
     pub status: PacketStatus,
 }
 
-pub enum PacketStatus {}
+#[derive(PartialEq, Eq)]
+pub enum PacketStatus {
+    Send,
+    Recv,
+    Ack,
+    InboxAck,
+    OutboxAck,
+}
 
 impl Encodable for IbcPacket {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
@@ -277,7 +285,7 @@ pub fn handle_msg_connection_open_init(
     client: Client,
     old_connections: IbcConnections,
     new_connections: IbcConnections,
-    msg: MsgConnectionOpenInit,
+    _: MsgConnectionOpenInit,
 ) -> Result<(), VerifyError> {
     if old_connections.connections.len() + 1 != new_connections.connections.len()
         || old_connections.next_connection_number + 1 != new_connections.next_connection_number
@@ -645,7 +653,8 @@ pub fn handle_msg_ack_packet(
     client: Client,
     old_channel: IbcChannel,
     new_channel: IbcChannel,
-    ibc_packet: IbcPacket,
+    old_ibc_packet: IbcPacket,
+    new_ibc_packet: IbcPacket,
     msg: MsgAckPacket,
 ) -> Result<(), VerifyError> {
     if !old_channel.equal_unless_sequence(&new_channel) {
@@ -664,14 +673,38 @@ pub fn handle_msg_ack_packet(
         return Err(VerifyError::WrongChannelState);
     }
 
-    if ibc_packet.packet.sequence != new_channel.sequence.next_recv_ack {
+    if new_ibc_packet.packet.sequence != new_channel.sequence.next_recv_ack {
         return Err(VerifyError::WrongPacketSequence);
+    }
+
+    if old_ibc_packet.status != PacketStatus::Send && new_ibc_packet.status != PacketStatus::Ack {
+        return Err(VerifyError::WrongPacketStatus);
+    }
+
+    if old_ibc_packet.packet != new_ibc_packet.packet {
+        return Err(VerifyError::WrongPacketContent);
     }
 
     let obj = PacketAck {
         ack: msg.acknowledgement,
-        packet: ibc_packet.packet,
+        packet: new_ibc_packet.packet,
     };
 
     verify_object(client, obj, msg.proofs.object_proof)
+}
+
+pub fn handle_msg_ack_outbox_packet(
+    old_ibc_packet: IbcPacket,
+    new_ibc_packet: IbcPacket,
+    _: MsgAckOutboxPacket,
+) -> Result<(), VerifyError> {
+    if old_ibc_packet.status != PacketStatus::Recv
+        && new_ibc_packet.status != PacketStatus::OutboxAck
+    {
+        return Err(VerifyError::WrongPacketStatus);
+    }
+    if old_ibc_packet.packet != new_ibc_packet.packet {
+        return Err(VerifyError::WrongPacketContent);
+    }
+    Ok(())
 }
