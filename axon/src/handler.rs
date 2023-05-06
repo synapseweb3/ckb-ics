@@ -1,6 +1,7 @@
 // These structs should only be used in CKB contracts.
 
 use crate::message::Envelope;
+use crate::message::MsgAckInboxPacket;
 use crate::message::MsgAckOutboxPacket;
 use crate::message::MsgAckPacket;
 use crate::message::MsgChannelOpenAck;
@@ -705,6 +706,16 @@ pub fn handle_msg_ack_outbox_packet(
     }
     if old_ibc_packet.packet != new_ibc_packet.packet {
         return Err(VerifyError::WrongPacketContent);
+    }
+    Ok(())
+}
+
+pub fn handle_msg_ack_inbox_packet(
+    old_ibc_packet: IbcPacket,
+    _: MsgAckInboxPacket,
+) -> Result<(), VerifyError> {
+    if old_ibc_packet.status != PacketStatus::Ack {
+        return Err(VerifyError::WrongPacketStatus);
     }
     Ok(())
 }
