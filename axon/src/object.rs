@@ -142,3 +142,15 @@ impl Object for ChannelEnd {
         todo!()
     }
 }
+
+// The ack of the packet
+pub struct PacketAck {
+    pub ack: Vec<u8>,
+    pub packet: Packet,
+}
+
+impl Object for PacketAck {
+    fn encode(&self) -> Vec<u8> {
+        todo!()
+    }
+}

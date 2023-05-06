@@ -1,6 +1,7 @@
 // These structs should only be used in CKB contracts.
 
 use crate::message::Envelope;
+use crate::message::MsgAckPacket;
 use crate::message::MsgChannelOpenAck;
 use crate::message::MsgChannelOpenConfirm;
 use crate::message::MsgChannelOpenInit;
@@ -17,6 +18,7 @@ use crate::object::ChannelEnd;
 use crate::object::ConnectionCounterparty;
 use crate::object::Ordering;
 use crate::object::Packet;
+use crate::object::PacketAck;
 use crate::object::State;
 use crate::object::VerifyError;
 use crate::proof::Block;
@@ -166,7 +168,7 @@ impl Sequence {
         return true;
     }
 
-    pub fn next_recv_packer_is(&self, new: &Self) -> bool {
+    pub fn next_recv_packet_is(&self, new: &Self) -> bool {
         if self.next_send_packet != new.next_send_packet {
             return false;
         }
@@ -176,6 +178,41 @@ impl Sequence {
         }
 
         if self.next_recv_ack != new.next_recv_ack {
+            return false;
+        }
+
+        if self.unorder_recv_packet.len() != new.unorder_recv_packet.len() {
+            return false;
+        }
+
+        for i in 0..self.unorder_recv_packet.len() {
+            if self.unorder_recv_packet[i] != new.unorder_recv_packet[i] {
+                return false;
+            }
+        }
+
+        if self.unorder_recv_ack.len() != new.unorder_recv_packet.len() {
+            return false;
+        }
+
+        for j in 0..self.unorder_recv_ack.len() {
+            if self.unorder_recv_ack[j] != new.unorder_recv_ack[j] {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn next_recv_ack_is(&self, new: &Self) -> bool {
+        if self.next_send_packet != new.next_send_packet {
+            return false;
+        }
+
+        if self.next_recv_packet != new.next_recv_packet {
+            return false;
+        }
+
+        if self.next_recv_ack + 1 != new.next_recv_ack {
             return false;
         }
 
@@ -551,7 +588,8 @@ pub fn handle_msg_send_packet(
     _: Client,
     old_channel: IbcChannel,
     new_channel: IbcChannel,
-    msg: MsgSendPacket,
+    ibc_packet: IbcPacket,
+    _: MsgSendPacket,
 ) -> Result<(), VerifyError> {
     if !old_channel.equal_unless_sequence(&new_channel) {
         return Err(VerifyError::WrongChannel);
@@ -568,7 +606,7 @@ pub fn handle_msg_send_packet(
         return Err(VerifyError::WrongChannelState);
     }
 
-    if msg.packet.sequence != new_channel.sequence.next_send_packet {
+    if ibc_packet.packet.sequence != new_channel.sequence.next_send_packet {
         return Err(VerifyError::WrongPacketSequence);
     }
 
@@ -579,6 +617,7 @@ pub fn handle_msg_recv_packet(
     client: Client,
     old_channel: IbcChannel,
     new_channel: IbcChannel,
+    ibc_packet: IbcPacket,
     msg: MsgRecvPacket,
 ) -> Result<(), VerifyError> {
     if !old_channel.equal_unless_sequence(&new_channel) {
@@ -587,7 +626,7 @@ pub fn handle_msg_recv_packet(
 
     if !old_channel
         .sequence
-        .next_recv_packer_is(&new_channel.sequence)
+        .next_recv_packet_is(&new_channel.sequence)
     {
         return Err(VerifyError::WrongChannel);
     }
@@ -596,8 +635,43 @@ pub fn handle_msg_recv_packet(
         return Err(VerifyError::WrongChannelState);
     }
 
-    if msg.packet.sequence != new_channel.sequence.next_recv_packet {
+    if ibc_packet.packet.sequence != new_channel.sequence.next_recv_packet {
         return Err(VerifyError::WrongPacketSequence);
     }
-    verify_object(client, msg.packet, msg.proofs.object_proof)
+    verify_object(client, ibc_packet.packet, msg.proofs.object_proof)
+}
+
+pub fn handle_msg_ack_packet(
+    client: Client,
+    old_channel: IbcChannel,
+    new_channel: IbcChannel,
+    ibc_packet: IbcPacket,
+    msg: MsgAckPacket,
+) -> Result<(), VerifyError> {
+    if !old_channel.equal_unless_sequence(&new_channel) {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if !old_channel.sequence.next_recv_ack_is(&new_channel.sequence) {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if new_channel.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    if new_channel.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    if ibc_packet.packet.sequence != new_channel.sequence.next_recv_ack {
+        return Err(VerifyError::WrongPacketSequence);
+    }
+
+    let obj = PacketAck {
+        ack: msg.acknowledgement,
+        packet: ibc_packet.packet,
+    };
+
+    verify_object(client, obj, msg.proofs.object_proof)
 }

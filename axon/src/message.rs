@@ -28,19 +28,29 @@ pub enum MsgType {
     MsgClientCreate,
     MsgClientUpdate,
     MsgClientMisbehaviour,
+
     MsgConnectionOpenInit,
     MsgConnectionOpenTry,
     MsgConnectionOpenAck,
     MsgConnectionOpenConfirm,
+
     MsgChannelOpenInit,
     MsgChannelOpenTry,
     MsgChannelOpenAck,
     MsgChannelOpenConfirm,
     MsgChannelCloseInit,
     MsgChannelCloseConfirm,
+
     MsgSendPacket,
     MsgRecvPacket,
     MsgAckPacket,
+    // Business side sends this message after handling MsgRecvPacket
+    MsgOutboxAckPacket,
+    // Business side sends this message after handling MsgAckPacket
+    MsgInboxAckPacket,
+    // Relayer side sends this message after
+    // the packet is finsihed and they could get back their capacity
+    MsgFinishPacket,
     MsgTimeoutPacket,
 }
 
@@ -320,20 +330,17 @@ impl Decodable for MsgChannelCloseConfirm {
     }
 }
 
-// todo: Explain this
-pub struct MsgSendPacket {
-    pub packet: Packet,
-}
+// As our CKB convention, the content of the packet is stored in Witness.
+// We don't need to place it again in this message.
+pub struct MsgSendPacket {}
 
 impl Encodable for MsgSendPacket {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
+    fn rlp_append(&self, _: &mut rlp::RlpStream) {}
 }
 
 impl Decodable for MsgSendPacket {
-    fn decode(rlp: &Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
+    fn decode(_: &Rlp) -> Result<Self, rlp::DecoderError> {
+        Ok(MsgSendPacket {})
     }
 }
 
@@ -355,7 +362,7 @@ impl Decodable for MsgRecvPacket {
 }
 
 pub struct MsgAckPacket {
-    pub packet: Packet,
+    // pub packet: Packet,
     pub acknowledgement: Bytes,
     pub proofs: Proofs,
 }
@@ -388,4 +395,13 @@ impl Decodable for MsgTimeoutPacket {
     fn decode(rlp: &Rlp) -> Result<Self, rlp::DecoderError> {
         todo!()
     }
+}
+
+// Business side sends this message after handling MsgAckPacket
+pub struct MsgAckInboxPacket {}
+
+// Business side sends this message after handling MsgRecvPacket
+pub struct MsgAckOutboxPacket {
+    pub ack: Vec<u8>,
+    pub packet: Packet,
 }
