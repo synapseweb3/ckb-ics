@@ -11,6 +11,7 @@ pub trait Object {
     fn encode(&self) -> Vec<u8>;
 }
 
+#[derive(Debug)]
 pub enum VerifyError {
     FoundNoMessage,
     EventNotMatch,
@@ -37,7 +38,9 @@ pub enum VerifyError {
     WrongPacketContent,
 }
 
+#[derive(Debug, Clone, Default)]
 pub enum ClientType {
+    #[default]
     Unknown,
     Tendermint,
     Ethereum,
@@ -45,8 +48,9 @@ pub enum ClientType {
     Ckb,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub enum State {
+    #[default]
     Unknown,
     Init,
     OpenTry,
@@ -55,33 +59,35 @@ pub enum State {
     Frozen,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub enum Ordering {
+    #[default]
     Unknown,
     Unordered,
     Ordered,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ConnectionCounterparty {
     pub client_id: CString,
     pub connection_id: Option<CString>,
     // pub commitment_prefix: Bytes,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct ChannelCounterparty {
     pub port_id: CString,
     pub channel_id: CString,
 }
 
+#[derive(Debug, Default)]
 pub struct Proofs {
     pub height: U256,
     pub object_proof: ObjectProof,
     pub client_proof: Vec<u8>,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct Packet {
     pub sequence: u16,
     pub source_port_id: CString,
@@ -99,6 +105,7 @@ impl Object for Packet {
     }
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct ClientState {
     pub chain_id: CString,
     pub client_type: ClientType,
@@ -117,7 +124,7 @@ pub struct ConsensusState {
     pub extra_payload: Bytes,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct ConnectionEnd {
     pub state: State,
     pub client_id: CString,

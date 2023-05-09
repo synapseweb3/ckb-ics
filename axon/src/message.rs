@@ -131,13 +131,13 @@ impl Decodable for MsgConnectionOpenInit {
 /// Per our convention, this message is sent to chain B.
 /// The handler will check proofs of chain A.
 pub struct MsgConnectionOpenTry {
-    pub client_id_on_b: CString,
+    // pub client_id_on_b: CString,
     // TODO: this field is useful when CKB is connecting to chains but Axon.
     // pub client_state_of_b_on_a: Bytes,
-    pub counterparty: ConnectionCounterparty,
+    // pub counterparty: ConnectionCounterparty,
     pub proof: Proofs,
     // pub counterparty_versions: Vec<CString>,
-    pub delay_period: u64,
+    // pub delay_period: u64,
     // deprecated
     // pub previous_connection_id: CString,
 }
@@ -161,7 +161,7 @@ pub struct MsgConnectionOpenAck {
     // This message just convey the idx of the connection cell of it
     // and the content of that cell would be stored in witness of the tx.
     pub conn_id_on_a: usize,
-    pub conn_id_on_b: CString,
+    // pub conn_id_on_b: CString,
     pub client_state_of_a_on_b: ClientState,
     pub proof_conn_end_on_b: Proofs,
     pub version: CString,
@@ -203,10 +203,10 @@ impl Decodable for MsgConnectionOpenConfirm {
 
 // Per our convention, this message is sent to chain A
 pub struct MsgChannelOpenInit {
-    pub port_id_on_a: CString,
-    pub connection_hops_on_a: Vec<CString>,
-    pub port_id_on_b: CString,
-    pub ordering: Ordering,
+    // pub port_id_on_a: CString,
+    // pub connection_hops_on_a: Vec<CString>,
+    // pub port_id_on_b: CString,
+    // pub ordering: Ordering,
     // pub version: Verison
 }
 
@@ -223,14 +223,15 @@ impl Decodable for MsgChannelOpenInit {
 }
 
 /// Per our convention, this message is sent to chain B.
+#[derive(Default)]
 pub struct MsgChannelOpenTry {
-    pub port_id_on_b: CString,
+    // pub port_id_on_b: CString,
     // CKB's channel doesn't have this field
     // pub connection_hops_on_b: Vec<CString>,
-    pub port_id_on_a: CString,
-    pub chain_id_on_a: CString,
+    // pub port_id_on_a: CString,
+    // pub chain_id_on_a: CString,
     pub proof_chan_end_on_a: Proofs,
-    pub ordering: Ordering,
+    // pub ordering: Ordering,
     pub connection_hops_on_a: Vec<CString>,
     // pub previous_channal_id: CString,
     // pub version_proposal: Version,
@@ -272,9 +273,9 @@ impl Decodable for MsgChannelOpenAck {
 
 /// Per our convention, this message is sent to chain B.
 pub struct MsgChannelOpenConfirm {
-    pub port_id_on_b: CString,
-    pub chain_id_on_b: CString,
-    pub channel_id: ChannelCounterparty,
+    // pub port_id_on_b: CString,
+    // pub chain_id_on_b: CString,
+    // pub channel_id: ChannelCounterparty,
     pub proofs: Proofs,
     pub connection_hops_on_b: Vec<CString>,
 }
@@ -345,7 +346,6 @@ impl Decodable for MsgSendPacket {
 }
 
 pub struct MsgRecvPacket {
-    pub packet: Packet,
     pub proofs: Proofs,
 }
 
