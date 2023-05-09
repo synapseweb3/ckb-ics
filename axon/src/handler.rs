@@ -37,8 +37,9 @@ use rlp::{decode, Decodable, Encodable};
 
 use super::object::ConnectionEnd;
 
+#[derive(Debug, Default, Clone)]
 pub struct IbcConnections {
-    pub connection_prefix: Bytes,
+    // pub connection_prefix: Bytes,
     pub channel_prefix: Bytes,
     pub next_connection_number: u16,
     pub next_channel_number: u16,
@@ -57,6 +58,7 @@ impl Decodable for IbcConnections {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct IbcChannel {
     pub num: u16,
     pub port_id: CString,
@@ -107,7 +109,7 @@ impl Decodable for IbcChannel {
 
 pub struct IbcPacket {
     pub packet: Packet,
-    pub tx_hash: H256,
+    pub tx_hash: Option<H256>,
     pub status: PacketStatus,
 }
 
@@ -132,7 +134,7 @@ impl Decodable for IbcPacket {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Sequence {
     pub next_send_packet: u16,
     pub next_recv_packet: u16,
@@ -165,7 +167,7 @@ impl Sequence {
             }
         }
 
-        if self.unorder_recv_ack.len() != new.unorder_recv_packet.len() {
+        if self.unorder_recv_ack.len() != new.unorder_recv_ack.len() {
             return false;
         }
 
@@ -200,7 +202,7 @@ impl Sequence {
             }
         }
 
-        if self.unorder_recv_ack.len() != new.unorder_recv_packet.len() {
+        if self.unorder_recv_ack.len() != new.unorder_recv_ack.len() {
             return false;
         }
 
@@ -235,7 +237,7 @@ impl Sequence {
             }
         }
 
-        if self.unorder_recv_ack.len() != new.unorder_recv_packet.len() {
+        if self.unorder_recv_ack.len() != new.unorder_recv_ack.len() {
             return false;
         }
 
@@ -260,6 +262,7 @@ impl Decodable for Sequence {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct Client {
     pub id: CString,
 }
@@ -341,12 +344,12 @@ pub fn handle_msg_connection_open_try(
 
     let expected_connection_end_on_counterparty = ConnectionEnd {
         state: State::Init,
-        client_id: msg.counterparty.client_id.clone(),
+        client_id: connection.client_id.clone(),
         counterparty: ConnectionCounterparty {
             client_id: client.id.clone(),
             connection_id: None,
         },
-        delay_period: msg.delay_period.clone(),
+        delay_period: connection.delay_period.clone(),
     };
 
     let object_proof = msg.proof.object_proof;
@@ -427,7 +430,7 @@ pub fn handle_msg_connection_open_confirm(
     {
         return Err(VerifyError::WrongClient);
     }
-    if old_connection.state != State::Init || old_connection.state != State::Open {
+    if old_connection.state != State::OpenTry || new_connection.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
     }
     let expected = ConnectionEnd {
@@ -450,22 +453,20 @@ pub fn handle_channel_open_init_and_try(
     old_connections: IbcConnections,
     new_connections: IbcConnections,
 ) -> Result<(), VerifyError> {
-    let connection_idx = channel.connection_hops[0];
     if old_connections.next_channel_number + 1 != new_connections.next_channel_number {
         return Err(VerifyError::WrongConnectionNextChannelNumber);
     }
-    let new_connection_end = &new_connections.connections[connection_idx];
 
     match envelop.msg_type {
         MsgType::MsgChannelOpenInit => {
             let init_msg = decode::<MsgChannelOpenInit>(&envelop.content)
                 .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_init(client, new_connection_end, channel, init_msg)
+            handle_msg_channel_open_init(client, &new_connections, channel, init_msg)
         }
         MsgType::MsgChannelOpenTry => {
             let open_try_msg = decode::<MsgChannelOpenTry>(&envelop.content)
                 .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_try(client, new_connection_end, channel, open_try_msg)
+            handle_msg_channel_open_try(client, &new_connections, channel, open_try_msg)
         }
         _ => Err(VerifyError::EventNotMatch),
     }
@@ -473,10 +474,16 @@ pub fn handle_channel_open_init_and_try(
 
 pub fn handle_msg_channel_open_init(
     client: Client,
-    conn: &ConnectionEnd,
+    ibc_connections: &IbcConnections,
     new: IbcChannel,
     _msg: MsgChannelOpenInit,
 ) -> Result<(), VerifyError> {
+    if new.connection_hops.len() == 0 {
+        return Err(VerifyError::ConnectionsWrong);
+    }
+    let conn_id = new.connection_hops[0];
+    let conn = &ibc_connections.connections[conn_id];
+
     if conn.client_id != client.id {
         return Err(VerifyError::WrongConnectionClient);
     }
@@ -494,16 +501,26 @@ pub fn handle_msg_channel_open_init(
 
 pub fn handle_msg_channel_open_try(
     client: Client,
-    conn: &ConnectionEnd,
+    ibc_connections: &IbcConnections,
     new: IbcChannel,
     msg: MsgChannelOpenTry,
 ) -> Result<(), VerifyError> {
+    if new.connection_hops.len() == 0 {
+        return Err(VerifyError::ConnectionsWrong);
+    }
+    let conn_id = new.connection_hops[0];
+    let conn = &ibc_connections.connections[conn_id];
+
     if conn.client_id != client.id {
         return Err(VerifyError::WrongConnectionClient);
     }
 
     if conn.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
+    }
+
+    if new.state != State::OpenTry {
+        return Err(VerifyError::WrongChannelState);
     }
 
     let object = ChannelEnd {
@@ -604,7 +621,7 @@ pub fn handle_msg_send_packet(
         return Err(VerifyError::WrongChannel);
     }
 
-    if old_channel
+    if !old_channel
         .sequence
         .next_send_packet_is(&new_channel.sequence)
     {
@@ -615,7 +632,11 @@ pub fn handle_msg_send_packet(
         return Err(VerifyError::WrongChannelState);
     }
 
-    if ibc_packet.packet.sequence != new_channel.sequence.next_send_packet {
+    if ibc_packet.status != PacketStatus::Send {
+        return Err(VerifyError::WrongPacketStatus);
+    }
+
+    if ibc_packet.packet.sequence != old_channel.sequence.next_send_packet {
         return Err(VerifyError::WrongPacketSequence);
     }
 
@@ -647,6 +668,11 @@ pub fn handle_msg_recv_packet(
     if ibc_packet.packet.sequence != new_channel.sequence.next_recv_packet {
         return Err(VerifyError::WrongPacketSequence);
     }
+
+    if ibc_packet.status != PacketStatus::Recv {
+        return Err(VerifyError::WrongPacketStatus);
+    }
+
     verify_object(client, ibc_packet.packet, msg.proofs.object_proof)
 }
 
@@ -718,4 +744,334 @@ pub fn handle_msg_ack_inbox_packet(
         return Err(VerifyError::WrongPacketStatus);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::object::Proofs;
+
+    use super::*;
+
+    #[test]
+    fn test_handle_msg_connection_open_init() {
+        let client = Client::default();
+
+        let old_connections = IbcConnections::default();
+        let mut new_connections = IbcConnections::default();
+        new_connections.connections.push(ConnectionEnd {
+            state: State::Init,
+            client_id: Default::default(),
+            counterparty: Default::default(),
+            delay_period: Default::default(),
+        });
+        new_connections.next_connection_number += 1;
+
+        let msg = MsgConnectionOpenInit {};
+        handle_msg_connection_open_init(client, old_connections, new_connections, msg).unwrap();
+    }
+
+    #[test]
+    fn test_handle_msg_connection_open_try() {
+        let client = Client::default();
+
+        let old_connections = IbcConnections::default();
+        let mut new_connections = IbcConnections::default();
+        new_connections.connections.push(ConnectionEnd {
+            state: State::OpenTry,
+            client_id: Default::default(),
+            counterparty: Default::default(),
+            delay_period: Default::default(),
+        });
+        new_connections.next_connection_number += 1;
+
+        let msg = MsgConnectionOpenTry {
+            proof: Proofs::default(),
+        };
+
+        handle_msg_connection_open_try(client, old_connections, new_connections, msg).unwrap();
+    }
+
+    #[test]
+    fn test_handle_msg_connection_open_ack() {
+        let client = Client::default();
+
+        let msg = MsgConnectionOpenAck {
+            conn_id_on_a: 1,
+            client_state_of_a_on_b: Default::default(),
+            proof_conn_end_on_b: Default::default(),
+            version: Default::default(),
+        };
+
+        let dummy_connection_end = ConnectionEnd::default();
+
+        let mut old_connection_end = ConnectionEnd::default();
+        old_connection_end.state = State::Init;
+
+        let mut new_connection_end = ConnectionEnd::default();
+        new_connection_end.state = State::Open;
+
+        let mut old_connections = IbcConnections::default();
+        old_connections
+            .connections
+            .push(dummy_connection_end.clone());
+        old_connections.connections.push(old_connection_end);
+        old_connections
+            .connections
+            .push(dummy_connection_end.clone());
+
+        let mut new_connections = IbcConnections::default();
+        new_connections
+            .connections
+            .push(dummy_connection_end.clone());
+        new_connections.connections.push(new_connection_end);
+        new_connections
+            .connections
+            .push(dummy_connection_end.clone());
+
+        handle_msg_connection_open_ack(client, old_connections, new_connections, msg).unwrap();
+    }
+
+    #[test]
+    fn test_handle_msg_connection_open_confirm() {
+        let client = Client::default();
+
+        let msg = MsgConnectionOpenConfirm {
+            conn_id_on_b: 1,
+            proofs: Proofs::default(),
+        };
+
+        let dummy_connection_end = ConnectionEnd::default();
+
+        let mut old_connection_end = ConnectionEnd::default();
+        old_connection_end.state = State::OpenTry;
+
+        let mut new_connection_end = ConnectionEnd::default();
+        new_connection_end.state = State::Open;
+
+        let mut old_connections = IbcConnections::default();
+        old_connections
+            .connections
+            .push(dummy_connection_end.clone());
+        old_connections.connections.push(old_connection_end);
+        old_connections
+            .connections
+            .push(dummy_connection_end.clone());
+
+        let mut new_connections = IbcConnections::default();
+        new_connections
+            .connections
+            .push(dummy_connection_end.clone());
+        new_connections.connections.push(new_connection_end);
+        new_connections
+            .connections
+            .push(dummy_connection_end.clone());
+
+        handle_msg_connection_open_confirm(client, old_connections, new_connections, msg).unwrap();
+    }
+
+    #[test]
+    fn test_handle_msg_channel_open_init() {
+        let client = Client::default();
+
+        let mut new_connections = IbcConnections::default();
+        new_connections.next_channel_number += 1;
+
+        let mut connection_end = ConnectionEnd::default();
+        connection_end.state = State::Open;
+        new_connections.connections.push(connection_end);
+
+        let mut channel = IbcChannel::default();
+        channel.state = State::Init;
+        channel.connection_hops.push(0);
+
+        let msg = MsgChannelOpenInit {};
+        handle_msg_channel_open_init(client, &new_connections, channel, msg).unwrap();
+    }
+
+    #[test]
+    fn test_handle_msg_channel_open_try_success() {
+        let client = Client::default();
+
+        let mut new_connections = IbcConnections::default();
+        new_connections.next_channel_number += 1;
+
+        let mut connection_end = ConnectionEnd::default();
+        connection_end.state = State::Open;
+        new_connections.connections.push(connection_end);
+
+        let mut channel = IbcChannel::default();
+        channel.connection_hops.push(0);
+        channel.state = State::OpenTry;
+
+        let msg = MsgChannelOpenTry {
+            proof_chan_end_on_a: Proofs::default(),
+            connection_hops_on_a: Vec::new(),
+        };
+        handle_msg_channel_open_try(client, &new_connections, channel, msg).unwrap()
+    }
+
+    #[test]
+    fn test_handle_msg_channel_open_ack_success() {
+        let client = Client::default();
+        let mut old_channel = IbcChannel::default();
+        old_channel.state = State::Init;
+
+        let mut new_channel = IbcChannel::default();
+        new_channel.state = State::Open;
+
+        let msg = MsgChannelOpenAck {
+            chain_id_on_b: CString::default(),
+            proofs: Proofs::default(),
+            connection_hops_on_b: Vec::new(),
+        };
+
+        handle_msg_channel_open_ack(client, old_channel, new_channel, msg).unwrap();
+    }
+
+    #[test]
+    fn handle_msg_channel_open_confirm_success() {
+        let client = Client::default();
+        let mut old_channel = IbcChannel::default();
+        old_channel.state = State::OpenTry;
+
+        let mut new_channel = IbcChannel::default();
+        new_channel.state = State::Open;
+
+        let msg = MsgChannelOpenConfirm {
+            proofs: Proofs::default(),
+            connection_hops_on_b: Vec::new(),
+        };
+
+        handle_msg_channel_open_confirm(client, old_channel, new_channel, msg).unwrap();
+    }
+
+    #[test]
+    fn handle_msg_channel_open_confirm_channel_unmatch() {
+        let client = Client::default();
+        let mut old_channel = IbcChannel::default();
+        old_channel.state = State::OpenTry;
+
+        let mut new_channel = IbcChannel::default();
+        new_channel.state = State::Open;
+
+        new_channel.order = Ordering::Ordered;
+
+        let msg = MsgChannelOpenConfirm {
+            proofs: Proofs::default(),
+            connection_hops_on_b: Vec::new(),
+        };
+
+        if let Err(VerifyError::WrongChannel) =
+            handle_msg_channel_open_confirm(client, old_channel, new_channel, msg)
+        {
+        } else {
+            panic!()
+        }
+    }
+
+    #[test]
+    fn test_handle_msg_send_packet_success() {
+        let client = Client::default();
+
+        let mut seq2 = Sequence::default();
+        seq2.next_send_packet += 1;
+
+        let mut old_channel = IbcChannel::default();
+        old_channel.state = State::Open;
+
+        let mut new_channel = IbcChannel::default();
+        new_channel.sequence = seq2;
+        new_channel.state = State::Open;
+        let msg = MsgSendPacket {};
+
+        let packet = Packet::default();
+
+        let ibc_packet = IbcPacket {
+            packet,
+            tx_hash: None,
+            status: PacketStatus::Send,
+        };
+
+        handle_msg_send_packet(client, old_channel, new_channel, ibc_packet, msg).unwrap();
+    }
+
+    #[test]
+    fn test_msg_recv_packet_success() {
+        let seq1 = Sequence::default();
+        let mut seq2 = Sequence::default();
+        seq2.next_recv_packet += 1;
+
+        let mut old_channel = IbcChannel::default();
+        old_channel.sequence = seq1;
+        old_channel.state = State::Open;
+
+        let mut new_channel = IbcChannel::default();
+        new_channel.sequence = seq2;
+        new_channel.state = State::Open;
+
+        let mut packet = Packet::default();
+        packet.sequence = 1;
+
+        let ibc_packet = IbcPacket {
+            packet,
+            tx_hash: None,
+            status: PacketStatus::Recv,
+        };
+        handle_msg_recv_packet(
+            Client::default(),
+            old_channel,
+            new_channel,
+            ibc_packet,
+            MsgRecvPacket {
+                proofs: Proofs::default(),
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_msg_ack_outbox_packet_success() {
+        let packet = Packet::default();
+        let old_ibc_packet = IbcPacket {
+            packet: packet.clone(),
+            tx_hash: None,
+            status: PacketStatus::Recv,
+        };
+        let new_ibc_packet = IbcPacket {
+            packet,
+            tx_hash: None,
+            status: PacketStatus::OutboxAck,
+        };
+        handle_msg_ack_outbox_packet(
+            old_ibc_packet,
+            new_ibc_packet,
+            MsgAckOutboxPacket { ack: Vec::new() },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_msg_ack_outbox_packet_differenct_packet() {
+        let old_packet = Packet::default();
+        let mut new_packet = old_packet.clone();
+        new_packet.sequence = 1;
+        let old_ibc_packet = IbcPacket {
+            packet: old_packet,
+            tx_hash: None,
+            status: PacketStatus::Recv,
+        };
+        let new_ibc_packet = IbcPacket {
+            packet: new_packet,
+            tx_hash: None,
+            status: PacketStatus::OutboxAck,
+        };
+        if let Err(VerifyError::WrongPacketContent) = handle_msg_ack_outbox_packet(
+            old_ibc_packet,
+            new_ibc_packet,
+            MsgAckOutboxPacket { ack: Vec::new() },
+        ) {
+        } else {
+            panic!()
+        }
+    }
 }

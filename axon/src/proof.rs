@@ -5,6 +5,7 @@ use ethereum_types::{Address, Bloom, H256, H64, U256, U64};
 use rlp::{Decodable, Encodable, RlpStream};
 use rlp_derive::{RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWrapper};
 
+#[derive(Default, Debug)]
 pub struct ObjectProof {
     pub tx: Transaction,
     pub tx_root: H256,
@@ -20,6 +21,7 @@ pub struct ObjectProof {
     pub block: Block,
 }
 
+#[derive(Debug, Default)]
 pub struct Block {
     /// Hash of the block
     pub hash: Option<H256>,
@@ -73,6 +75,7 @@ impl Decodable for Block {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct Transaction {
     /// The transaction's hash
     pub hash: H256,
@@ -218,6 +221,7 @@ impl Transaction {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct TransactionReceipt {
     /// Transaction hash.
     pub transaction_hash: H256,
@@ -265,6 +269,7 @@ impl Encodable for TransactionReceipt {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct Log {
     /// H160. the contract that emitted the log
     pub address: Address,
@@ -314,6 +319,7 @@ impl Encodable for Log {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct Bytes(pub bytes::Bytes);
 
 impl From<Vec<u8>> for Bytes {
@@ -351,7 +357,7 @@ fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
     }
 }
 
-#[derive(RlpDecodableWrapper, RlpEncodableWrapper)]
+#[derive(RlpDecodableWrapper, RlpEncodableWrapper, Debug, Default)]
 pub struct AccessList(pub Vec<AccessListItem>);
 
 impl From<Vec<AccessListItem>> for AccessList {
@@ -360,7 +366,7 @@ impl From<Vec<AccessListItem>> for AccessList {
     }
 }
 
-#[derive(RlpDecodable, RlpEncodable)]
+#[derive(RlpDecodable, RlpEncodable, Debug, Default)]
 pub struct AccessListItem {
     /// Accessed address
     pub address: Address,
