@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 rlp = {version = "0.5.2", default-features = false}
 rlp-derive = {version = "0.1.0", default-features = false}
-cstr_core = "0.2.6"
 
 ethereum-types = {version = "0.14.1", default-features = false, features= ["ethbloom", "rlp"]}
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 bytes = { version = "1.4.0", default-features = false}
+axon-tools = {version= "0.0.9", features = ["proof"]}

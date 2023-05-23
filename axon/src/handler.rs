@@ -23,45 +23,40 @@ use crate::object::Packet;
 use crate::object::PacketAck;
 use crate::object::State;
 use crate::object::VerifyError;
-use crate::proof::Block;
 use crate::verify_object;
 
 // use axon_protocol::types::Bytes;
 use super::Bytes;
 use super::Vec;
 
+use alloc::string::String;
 use alloc::string::ToString;
-use cstr_core::CString;
+use axon_tools::types::AxonBlock;
+use axon_tools::types::Proof as AxonProof;
+use axon_tools::types::Validator;
 use ethereum_types::H256;
 use rlp::{decode, Decodable, Encodable};
+use rlp_derive::RlpDecodable;
+use rlp_derive::RlpEncodable;
 
 use super::object::ConnectionEnd;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcConnections {
     // pub connection_prefix: Bytes,
     pub channel_prefix: Bytes,
+    // can this be removed?
     pub next_connection_number: u16,
     pub next_channel_number: u16,
     pub connections: Vec<ConnectionEnd>,
 }
 
-impl Encodable for IbcConnections {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
-}
-
-impl Decodable for IbcConnections {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
-    }
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcChannel {
     pub num: u16,
-    pub port_id: CString,
+    // Since we use args of lock script in ckb cell to identify the port id,
+    // we do not need this field
+    pub port_id: String,
     pub state: State,
     pub order: Ordering,
     pub sequence: Sequence,
@@ -95,46 +90,45 @@ impl IbcChannel {
     }
 }
 
-impl Encodable for IbcChannel {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
-}
-
-impl Decodable for IbcChannel {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
-    }
-}
-
+#[derive(RlpEncodable, RlpDecodable)]
 pub struct IbcPacket {
     pub packet: Packet,
     pub tx_hash: Option<H256>,
     pub status: PacketStatus,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum PacketStatus {
-    Send,
+    Send = 1,
     Recv,
     Ack,
     InboxAck,
     OutboxAck,
 }
 
-impl Encodable for IbcPacket {
+impl Encodable for PacketStatus {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
+        let status = self.clone() as u8;
+        s.append(&status);
     }
 }
 
-impl Decodable for IbcPacket {
+impl Decodable for PacketStatus {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
+        let status: u8 = rlp.val_at(0)?;
+        match status {
+            1 => Ok(PacketStatus::Send),
+            2 => Ok(PacketStatus::Recv),
+            3 => Ok(PacketStatus::Ack),
+            4 => Ok(PacketStatus::InboxAck),
+            5 => Ok(PacketStatus::OutboxAck),
+            _ => Err(rlp::DecoderError::Custom("invalid packet status")),
+        }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct Sequence {
     pub next_send_packet: u16,
     pub next_recv_packet: u16,
@@ -250,38 +244,21 @@ impl Sequence {
     }
 }
 
-impl Encodable for Sequence {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
-}
-
-impl Decodable for Sequence {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Client {
-    pub id: CString,
+    pub id: String,
+    pub validators: Vec<Validator>,
 }
 
 impl Client {
-    pub fn verify_block(&self, block: Block) -> Result<(), VerifyError> {
-        todo!()
-    }
-}
-
-impl Encodable for Client {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
-}
-
-impl Decodable for Client {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
+    pub fn verify_block(
+        &mut self,
+        block: AxonBlock,
+        state_root: H256,
+        proof: AxonProof,
+    ) -> Result<(), VerifyError> {
+        axon_tools::verify_proof(block, state_root, &mut self.validators, proof)
+            .map_err(|_| VerifyError::InvalidReceiptProof)
     }
 }
 
@@ -397,7 +374,7 @@ pub fn handle_msg_connection_open_ack(
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
             client_id: client.id.clone(),
-            connection_id: Some(CString::new(conn_idx.to_string()).unwrap()),
+            connection_id: Some(conn_idx.to_string()),
         },
         delay_period: new_connection.delay_period.clone(),
     };
@@ -438,7 +415,7 @@ pub fn handle_msg_connection_open_confirm(
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
             client_id: client.id.clone(),
-            connection_id: Some(CString::new(conn_idx.to_string()).unwrap()),
+            connection_id: Some(conn_idx.to_string()),
         },
         delay_period: new_connection.delay_period.clone(),
     };
@@ -528,7 +505,7 @@ pub fn handle_msg_channel_open_try(
         ordering: new.order,
         remote: ChannelCounterparty {
             port_id: new.port_id,
-            channel_id: CString::new(new.num.to_string()).unwrap(),
+            channel_id: new.num.to_string(),
         },
         connection_hops: msg.connection_hops_on_a,
     };
@@ -576,7 +553,7 @@ pub fn handle_msg_channel_open_ack(
         ordering: new.order,
         remote: ChannelCounterparty {
             port_id: new.port_id,
-            channel_id: CString::new(new.num.to_string()).unwrap(),
+            channel_id: new.num.to_string(),
         },
         connection_hops: msg.connection_hops_on_b,
     };
@@ -602,7 +579,7 @@ pub fn handle_msg_channel_open_confirm(
         ordering: new.order,
         remote: ChannelCounterparty {
             port_id: new.port_id,
-            channel_id: CString::new(new.num.to_string()).unwrap(),
+            channel_id: new.num.to_string(),
         },
         connection_hops: msg.connection_hops_on_b,
     };
@@ -797,9 +774,7 @@ mod tests {
 
         let msg = MsgConnectionOpenAck {
             conn_id_on_a: 1,
-            client_state_of_a_on_b: Default::default(),
             proof_conn_end_on_b: Default::default(),
-            version: Default::default(),
         };
 
         let dummy_connection_end = ConnectionEnd::default();
@@ -920,7 +895,6 @@ mod tests {
         new_channel.state = State::Open;
 
         let msg = MsgChannelOpenAck {
-            chain_id_on_b: CString::default(),
             proofs: Proofs::default(),
             connection_hops_on_b: Vec::new(),
         };

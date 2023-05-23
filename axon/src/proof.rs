@@ -1,227 +1,94 @@
 // Reference to ehters-core
-use alloc::vec::Vec;
-use cstr_core::CString;
-use ethereum_types::{Address, Bloom, H256, H64, U256, U64};
+use alloc::{string::String, vec::Vec};
+use axon_tools::types::{AxonBlock, AxonHeader, Proof as AxonProof};
+use ethereum_types::{Address, Bloom, H256, U256, U64};
 use rlp::{Decodable, Encodable, RlpStream};
 use rlp_derive::{RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWrapper};
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ObjectProof {
-    pub tx: Transaction,
-    pub tx_root: H256,
-    pub tx_proof: Vec<Vec<u8>>,
-
     pub receipt: TransactionReceipt,
-    pub receipt_root: H256,
     pub receipt_proof: Vec<Vec<u8>>,
-
-    // the transaction idx in the block
-    pub idx: u64,
-
-    pub block: Block,
-}
-
-#[derive(Debug, Default)]
-pub struct Block {
-    /// Hash of the block
-    pub hash: Option<H256>,
-    /// Hash of the parent
-    pub parent_hash: H256,
-    /// Hash of the uncles
-    pub uncles_hash: H256,
-    /// Miner/author's address. None if pending.
-    pub author: Option<Address>,
-    /// State root hash
+    pub block: AxonBlock,
     pub state_root: H256,
-    /// Transactions root hash
-    pub transactions_root: H256,
-    /// Transactions receipts root hash
-    pub receipts_root: H256,
-    /// Block number. None if pending.
-    pub number: Option<U64>,
-    /// Gas Used
-    pub gas_used: U256,
-    /// Gas Limit
-    pub gas_limit: U256,
-    /// Extra data
-    pub extra_data: Bytes,
-    /// Logs bloom
-    pub logs_bloom: Option<Bloom>,
-    /// Timestamp
-    pub timestamp: U256,
-    /// Difficulty
-    pub difficulty: U256,
-    /// Total difficulty
-    pub total_difficulty: Option<U256>,
-    /// Seal fields
-    pub seal_fields: Vec<Bytes>,
-    /// Uncles' hashes
-    pub uncles: Vec<H256>,
-    /// Transactions
-    pub transactions: Vec<Transaction>,
-    /// Size in bytes
-    pub size: Option<U256>,
-    /// Mix Hash
-    pub mix_hash: Option<H256>,
-    /// Nonce
-    pub nonce: Option<H64>,
-    /// Base fee per unit of gas (if past London)
-    pub base_fee_per_gas: Option<U256>,
+    pub axon_proof: AxonProof,
 }
 
-impl Decodable for Block {
-    fn decode(_: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
+impl Encodable for ObjectProof {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.append(&self.receipt)
+            .append_list::<Vec<_>, Vec<_>>(&self.receipt_proof)
+            .append(&self.block)
+            .append(&self.state_root)
+            .append(&self.axon_proof);
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Transaction {
-    /// The transaction's hash
-    pub hash: H256,
-
-    /// The transaction's nonce
-    pub nonce: U256,
-
-    /// Block hash. None when pending.
-    pub block_hash: Option<H256>,
-
-    /// Block number. None when pending.
-    pub block_number: Option<U64>,
-
-    /// Transaction Index. None when pending.
-    pub transaction_index: Option<U64>,
-
-    /// Sender
-    pub from: Address,
-
-    /// Recipient (None when contract creation)
-    pub to: Option<Address>,
-
-    /// Transferred value
-    pub value: U256,
-
-    /// Gas Price, null for Type 2 transactions
-    pub gas_price: Option<U256>,
-
-    /// Gas amount
-    pub gas: U256,
-
-    /// Input data
-    pub input: Bytes,
-
-    /// ECDSA recovery id
-    pub v: U64,
-
-    /// ECDSA signature r
-    pub r: U256,
-
-    /// ECDSA signature s
-    pub s: U256,
-
-    // EIP2718
-    /// Transaction type, Some(2) for EIP-1559 transaction,
-    /// Some(1) for AccessList transaction, None for Legacy
-    pub transaction_type: Option<U64>,
-
-    // EIP2930
-    pub access_list: Option<AccessList>,
-
-    /// Represents the maximum tx fee that will go to the miner as part of the user's
-    /// fee payment. It serves 3 purposes:
-    /// 1. Compensates miners for the uncle/ommer risk + fixed costs of including transaction in a
-    /// block; 2. Allows users with high opportunity costs to pay a premium to miners;
-    /// 3. In times where demand exceeds the available block space (i.e. 100% full, 30mm gas),
-    /// this component allows first price auctions (i.e. the pre-1559 fee model) to happen on the
-    /// priority fee.
-    ///
-    /// More context [here](https://hackmd.io/@q8X_WM2nTfu6nuvAzqXiTQ/1559-wallets)
-    pub max_priority_fee_per_gas: Option<U256>,
-
-    /// Represents the maximum amount that a user is willing to pay for their tx (inclusive of
-    /// baseFeePerGas and maxPriorityFeePerGas). The difference between maxFeePerGas and
-    /// baseFeePerGas + maxPriorityFeePerGas is “refunded” to the user.
-    pub max_fee_per_gas: Option<U256>,
-
-    pub chain_id: Option<U256>,
+impl Decodable for ObjectProof {
+    fn decode(r: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        let receipt: TransactionReceipt = r.val_at(0)?;
+        let receipt_proof: Vec<Vec<u8>> = r.list_at(1)?;
+        let block: AxonBlock = r.val_at(2)?;
+        let state_root: H256 = r.val_at(3)?;
+        let axon_proof: AxonProof = r.val_at(4)?;
+        Ok(ObjectProof {
+            receipt,
+            receipt_proof,
+            block,
+            state_root,
+            axon_proof,
+        })
+    }
 }
 
-impl Transaction {
-    pub fn rlp(&self) -> Bytes {
-        let mut rlp = RlpStream::new();
-        rlp.begin_unbounded_list();
-
-        match self.transaction_type {
-            // EIP-2930 (0x01)
-            Some(x) if x == U64::from(1) => {
-                rlp_opt(&mut rlp, &self.chain_id);
-                rlp.append(&self.nonce);
-                rlp_opt(&mut rlp, &self.gas_price);
-                rlp.append(&self.gas);
-
-                #[cfg(feature = "celo")]
-                self.inject_celo_metadata(&mut rlp);
-
-                rlp_opt(&mut rlp, &self.to);
-                rlp.append(&self.value);
-                rlp.append(&self.input.as_ref());
-                rlp_opt_list(&mut rlp, &self.access_list);
-                if let Some(chain_id) = self.chain_id {
-                    rlp.append(&normalize_v(self.v.as_u64(), U64::from(chain_id.as_u64())));
-                }
-            }
-            // EIP-1559 (0x02)
-            Some(x) if x == U64::from(2) => {
-                rlp_opt(&mut rlp, &self.chain_id);
-                rlp.append(&self.nonce);
-                rlp_opt(&mut rlp, &self.max_priority_fee_per_gas);
-                rlp_opt(&mut rlp, &self.max_fee_per_gas);
-                rlp.append(&self.gas);
-                rlp_opt(&mut rlp, &self.to);
-                rlp.append(&self.value);
-                rlp.append(&self.input.as_ref());
-                rlp_opt_list(&mut rlp, &self.access_list);
-                if let Some(chain_id) = self.chain_id {
-                    rlp.append(&normalize_v(self.v.as_u64(), U64::from(chain_id.as_u64())));
-                }
-            }
-            // Legacy (0x00)
-            _ => {
-                rlp.append(&self.nonce);
-                rlp_opt(&mut rlp, &self.gas_price);
-                rlp.append(&self.gas);
-
-                rlp_opt(&mut rlp, &self.to);
-                rlp.append(&self.value);
-                rlp.append(&self.input.as_ref());
-                rlp.append(&self.v);
-            }
-        }
-
-        rlp.append(&self.r);
-        rlp.append(&self.s);
-
-        rlp.finalize_unbounded_list();
-
-        let rlp_bytes: Bytes = rlp.out().freeze().into();
-        let mut encoded = Vec::new();
-        match self.transaction_type {
-            Some(x) if x == U64::from(1) => {
-                encoded.extend_from_slice(&[0x1]);
-                encoded.extend_from_slice(rlp_bytes.as_ref());
-                encoded.into()
-            }
-            Some(x) if x == U64::from(2) => {
-                encoded.extend_from_slice(&[0x2]);
-                encoded.extend_from_slice(rlp_bytes.as_ref());
-                encoded.into()
-            }
-            _ => rlp_bytes,
+impl Default for ObjectProof {
+    fn default() -> Self {
+        Self {
+            receipt: Default::default(),
+            receipt_proof: Default::default(),
+            block: AxonBlock {
+                header: AxonHeader {
+                    prev_hash: Default::default(),
+                    proposer: Default::default(),
+                    state_root: Default::default(),
+                    transactions_root: Default::default(),
+                    signed_txs_hash: Default::default(),
+                    receipts_root: Default::default(),
+                    log_bloom: Default::default(),
+                    difficulty: Default::default(),
+                    timestamp: Default::default(),
+                    number: Default::default(),
+                    gas_used: Default::default(),
+                    gas_limit: Default::default(),
+                    extra_data: Default::default(),
+                    mixed_hash: Default::default(),
+                    nonce: Default::default(),
+                    base_fee_per_gas: Default::default(),
+                    proof: AxonProof {
+                        number: Default::default(),
+                        round: Default::default(),
+                        block_hash: Default::default(),
+                        signature: Default::default(),
+                        bitmap: Default::default(),
+                    },
+                    call_system_script_count: Default::default(),
+                    chain_id: Default::default(),
+                },
+                tx_hashes: Vec::new(),
+            },
+            state_root: Default::default(),
+            axon_proof: AxonProof {
+                number: Default::default(),
+                round: Default::default(),
+                block_hash: Default::default(),
+                signature: Default::default(),
+                bitmap: Default::default(),
+            },
         }
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, RlpEncodable, RlpDecodable)]
 pub struct TransactionReceipt {
     /// Transaction hash.
     pub transaction_hash: H256,
@@ -259,17 +126,7 @@ pub struct TransactionReceipt {
     pub effective_gas_price: Option<U256>,
 }
 
-impl Encodable for TransactionReceipt {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(4);
-        rlp_opt(s, &self.status);
-        s.append(&self.cumulative_gas_used);
-        s.append(&self.logs_bloom);
-        s.append_list(&self.logs);
-    }
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, RlpEncodable, RlpDecodable)]
 pub struct Log {
     /// H160. the contract that emitted the log
     pub address: Address,
@@ -303,23 +160,14 @@ pub struct Log {
     pub transaction_log_index: Option<U256>,
 
     /// Log Type
-    pub log_type: Option<CString>,
+    pub log_type: Option<String>,
 
     /// True when the log was removed, due to a chain reorganization.
     /// false if it's a valid log.
     pub removed: Option<bool>,
 }
 
-impl Encodable for Log {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        s.begin_list(3);
-        s.append(&self.address);
-        s.append_list(&self.topics);
-        s.append(&self.data.0);
-    }
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, RlpEncodable, RlpDecodable)]
 pub struct Bytes(pub bytes::Bytes);
 
 impl From<Vec<u8>> for Bytes {
@@ -337,23 +185,6 @@ impl From<bytes::Bytes> for Bytes {
 impl AsRef<[u8]> for Bytes {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
-    }
-}
-
-fn rlp_opt<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
-    if let Some(inner) = opt {
-        rlp.append(inner);
-    } else {
-        rlp.append(&"");
-    }
-}
-
-fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
-    if let Some(inner) = opt {
-        rlp.append(inner);
-    } else {
-        // Choice of `u8` type here is arbitrary as all empty lists are encoded the same.
-        rlp.append_list::<u8, u8>(&[]);
     }
 }
 
