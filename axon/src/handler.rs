@@ -507,7 +507,7 @@ pub fn handle_msg_channel_open_try(
             port_id: new.port_id,
             channel_id: new.num.to_string(),
         },
-        connection_hops: msg.connection_hops_on_a,
+        connection_hops: Vec::new(),
     };
 
     verify_object(client, object, msg.proof_chan_end_on_a.object_proof)
@@ -555,7 +555,7 @@ pub fn handle_msg_channel_open_ack(
             port_id: new.port_id,
             channel_id: new.num.to_string(),
         },
-        connection_hops: msg.connection_hops_on_b,
+        connection_hops: Vec::new(),
     };
 
     verify_object(client, object, msg.proofs.object_proof)
@@ -581,7 +581,7 @@ pub fn handle_msg_channel_open_confirm(
             port_id: new.port_id,
             channel_id: new.num.to_string(),
         },
-        connection_hops: msg.connection_hops_on_b,
+        connection_hops: Vec::new(),
     };
 
     verify_object(client, object, msg.proofs.object_proof)
@@ -880,7 +880,6 @@ mod tests {
 
         let msg = MsgChannelOpenTry {
             proof_chan_end_on_a: Proofs::default(),
-            connection_hops_on_a: Vec::new(),
         };
         handle_msg_channel_open_try(client, &new_connections, channel, msg).unwrap()
     }
@@ -896,7 +895,6 @@ mod tests {
 
         let msg = MsgChannelOpenAck {
             proofs: Proofs::default(),
-            connection_hops_on_b: Vec::new(),
         };
 
         handle_msg_channel_open_ack(client, old_channel, new_channel, msg).unwrap();
@@ -913,7 +911,6 @@ mod tests {
 
         let msg = MsgChannelOpenConfirm {
             proofs: Proofs::default(),
-            connection_hops_on_b: Vec::new(),
         };
 
         handle_msg_channel_open_confirm(client, old_channel, new_channel, msg).unwrap();
@@ -932,7 +929,6 @@ mod tests {
 
         let msg = MsgChannelOpenConfirm {
             proofs: Proofs::default(),
-            connection_hops_on_b: Vec::new(),
         };
 
         if let Err(VerifyError::WrongChannel) =

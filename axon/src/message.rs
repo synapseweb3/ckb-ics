@@ -3,7 +3,6 @@
 use super::object::*;
 use super::Vec;
 use super::{Bytes, U256};
-use alloc::string::String;
 // use axon_protocol::types::{Bytes, U256};
 use rlp::{Decodable, Encodable, Rlp};
 use rlp_derive::RlpDecodable;
@@ -164,7 +163,7 @@ pub struct MsgChannelOpenTry {
     // pub chain_id_on_a: CString,
     pub proof_chan_end_on_a: Proofs,
     // pub ordering: Ordering,
-    pub connection_hops_on_a: Vec<String>,
+    // pub connection_hops_on_a: Vec<String>,
     // pub previous_channal_id: CString,
     // pub version_proposal: Version,
 }
@@ -177,7 +176,7 @@ pub struct MsgChannelOpenAck {
     // pub chan_id_on_a: CString,
     // pub chain_id_on_b: CString,
     pub proofs: Proofs,
-    pub connection_hops_on_b: Vec<String>,
+    // pub connection_hops_on_b: Vec<String>,
 }
 
 /// Per our convention, this message is sent to chain B.
@@ -187,7 +186,7 @@ pub struct MsgChannelOpenConfirm {
     // pub chain_id_on_b: CString,
     // pub channel_id: ChannelCounterparty,
     pub proofs: Proofs,
-    pub connection_hops_on_b: Vec<String>,
+    // pub connection_hops_on_b: Vec<String>,
 }
 
 // Per our convention, this message is sent to chain A.
