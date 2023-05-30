@@ -11,9 +11,8 @@ pub mod proof;
 pub mod verify_mpt;
 
 use ethereum_types::H256;
-use handler::Client;
 use object::{Object, VerifyError};
-use proof::{ObjectProof, TransactionReceipt};
+use proof::TransactionReceipt;
 use rlp::{Encodable, RlpStream};
 use verify_mpt::verify_proof;
 
@@ -21,17 +20,28 @@ pub type U256 = Vec<u8>;
 pub type Bytes = Vec<u8>;
 
 // The args of the connection cell's script
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct ConnectionArgs {
     pub client_id: [u8; 32],
 }
 
 impl ConnectionArgs {
+    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
+        if slice.len() != 32 {
+            return Err(());
+        }
+        Ok(ConnectionArgs {
+            client_id: slice[0..32].try_into().unwrap(),
+        })
+    }
+
     pub fn get_client_id(slice: &[u8]) -> &[u8] {
         &slice[0..32]
     }
 }
 
 // The args of the channel cell's script
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct ChannelArgs {
     pub client_id: [u8; 32],
     // For the sake of convenience, we use a bool here to describe
@@ -39,13 +49,25 @@ pub struct ChannelArgs {
     // frequently.
     pub open: bool,
     // Relayer will search the specified channel by channel id and port id
-    pub channel_id: Vec<u8>,
-    pub port_id: Vec<u8>,
+    pub channel_id: u16,
+    pub port_id: [u8; 32],
 }
 
 impl ChannelArgs {
-    pub fn get_client_id(slice: &[u8]) -> &[u8] {
-        &slice[0..32]
+    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
+        if slice.len() != 67 {
+            return Err(());
+        }
+        let client_id: [u8; 32] = slice[0..32].try_into().unwrap();
+        let open = slice.get(32).unwrap() > &0;
+        let channel_id = u16::from_le_bytes(slice[33..35].try_into().unwrap());
+        let port_id: [u8; 32] = slice[35..67].try_into().unwrap();
+        Ok(ChannelArgs {
+            client_id,
+            open,
+            channel_id,
+            port_id,
+        })
     }
 
     pub fn get_prefix_for_searching_unopen(&self) -> Vec<u8> {
@@ -70,53 +92,44 @@ impl ChannelArgs {
 
     pub fn to_args(self) -> Vec<u8> {
         let mut result = self.get_prefix_for_searching_unopen();
-        result.extend(self.channel_id);
+        result.extend(self.channel_id.to_le_bytes());
         result.extend(self.port_id);
         result
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct PacketArgs {
-    pub channel_id: Vec<u8>,
-    pub port_id: Vec<u8>,
+    pub channel_id: u16,
+    pub port_id: [u8; 32],
     pub sequence: u16,
 }
 
 impl PacketArgs {
+    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
+        if slice.len() != 36 {
+            return Err(());
+        }
+        let channel_id = u16::from_le_bytes(slice[0..2].try_into().unwrap());
+        let port_id = slice[2..34].try_into().unwrap();
+        let sequence = u16::from_le_bytes(slice[34..36].try_into().unwrap());
+        Ok(PacketArgs {
+            channel_id,
+            port_id,
+            sequence,
+        })
+    }
+
     pub fn to_args(self) -> Vec<u8> {
         let mut result = Vec::new();
-        result.extend(self.channel_id);
+        result.extend(self.channel_id.to_le_bytes());
         result.extend(self.port_id);
-        result.extend(self.sequence.to_le_bytes().to_vec());
+        result.extend(self.sequence.to_le_bytes());
         result
     }
 }
 
-pub fn verify_object<O: Object>(
-    mut client: Client,
-    object: O,
-    object_proof: ObjectProof,
-) -> Result<(), VerifyError> {
-    if cfg!(test) {
-        // In unittests, we just return Ok here.
-        // To test this function, we just need to test
-        // `verify_message` and `client.verify_block`
-        return Ok(());
-    }
-    verify_message(
-        object_proof.block.header.receipts_root,
-        object_proof.receipt,
-        object,
-        object_proof.receipt_proof,
-    )?;
-    client.verify_block(
-        object_proof.block,
-        object_proof.state_root,
-        object_proof.axon_proof,
-    )
-}
-
-fn verify_message<O: Object>(
+pub fn verify_message<O: Object>(
     receipt_root: H256,
     receipt: TransactionReceipt,
     object: O,

@@ -1,6 +1,6 @@
 // Reference to ehters-core
 use alloc::{string::String, vec::Vec};
-use axon_tools::types::{AxonBlock, AxonHeader, Proof as AxonProof};
+// use axon_tools::types::{AxonBlock, AxonHeader, Proof as AxonProof};
 use ethereum_types::{Address, Bloom, H256, U256, U64};
 use rlp::{Decodable, Encodable, RlpStream};
 use rlp_derive::{RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWrapper};
@@ -9,18 +9,20 @@ use rlp_derive::{RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWr
 pub struct ObjectProof {
     pub receipt: TransactionReceipt,
     pub receipt_proof: Vec<Vec<u8>>,
-    pub block: AxonBlock,
+    // pub block: AxonBlock,
+    pub block: Vec<u8>,
     pub state_root: H256,
-    pub axon_proof: AxonProof,
+    // pub axon_proof: AxonProof,
+    pub axon_proof: Vec<u8>,
 }
 
 impl Encodable for ObjectProof {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.append(&self.receipt)
             .append_list::<Vec<_>, Vec<_>>(&self.receipt_proof)
-            .append(&self.block)
+            .append_list(&self.block)
             .append(&self.state_root)
-            .append(&self.axon_proof);
+            .append_list(&self.axon_proof);
     }
 }
 
@@ -28,9 +30,9 @@ impl Decodable for ObjectProof {
     fn decode(r: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         let receipt: TransactionReceipt = r.val_at(0)?;
         let receipt_proof: Vec<Vec<u8>> = r.list_at(1)?;
-        let block: AxonBlock = r.val_at(2)?;
+        let block: Vec<u8> = r.list_at(2)?;
         let state_root: H256 = r.val_at(3)?;
-        let axon_proof: AxonProof = r.val_at(4)?;
+        let axon_proof: Vec<u8> = r.list_at(4)?;
         Ok(ObjectProof {
             receipt,
             receipt_proof,
@@ -46,44 +48,9 @@ impl Default for ObjectProof {
         Self {
             receipt: Default::default(),
             receipt_proof: Default::default(),
-            block: AxonBlock {
-                header: AxonHeader {
-                    prev_hash: Default::default(),
-                    proposer: Default::default(),
-                    state_root: Default::default(),
-                    transactions_root: Default::default(),
-                    signed_txs_hash: Default::default(),
-                    receipts_root: Default::default(),
-                    log_bloom: Default::default(),
-                    difficulty: Default::default(),
-                    timestamp: Default::default(),
-                    number: Default::default(),
-                    gas_used: Default::default(),
-                    gas_limit: Default::default(),
-                    extra_data: Default::default(),
-                    mixed_hash: Default::default(),
-                    nonce: Default::default(),
-                    base_fee_per_gas: Default::default(),
-                    proof: AxonProof {
-                        number: Default::default(),
-                        round: Default::default(),
-                        block_hash: Default::default(),
-                        signature: Default::default(),
-                        bitmap: Default::default(),
-                    },
-                    call_system_script_count: Default::default(),
-                    chain_id: Default::default(),
-                },
-                tx_hashes: Vec::new(),
-            },
+            block: Vec::new(),
             state_root: Default::default(),
-            axon_proof: AxonProof {
-                number: Default::default(),
-                round: Default::default(),
-                block_hash: Default::default(),
-                signature: Default::default(),
-                bitmap: Default::default(),
-            },
+            axon_proof: Vec::new(),
         }
     }
 }

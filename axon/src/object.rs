@@ -1,5 +1,7 @@
+use crate::handler::get_channel_id_str;
 use crate::proof::ObjectProof;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use rlp::Decodable;
 use rlp::Encodable;
@@ -31,13 +33,16 @@ pub enum VerifyError {
     WrongConnectionCounterparty,
     WrongConnectionClient,
     WrongConnectionNextChannelNumber,
+    WrongConnectionArgs,
 
     WrongChannelState,
     WrongChannel,
+    WrongChannelArgs,
 
     WrongPacketSequence,
     WrongPacketStatus,
     WrongPacketContent,
+    WrongPacketArgs,
 }
 
 #[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
@@ -122,7 +127,7 @@ pub struct Proofs {
     pub client_proof: Vec<u8>,
 }
 
-#[derive(Default, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
+#[derive(Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct Packet {
     pub sequence: u16,
     pub source_port_id: String,
@@ -135,6 +140,19 @@ pub struct Packet {
     // pub timeout_timestamp: u64,
 }
 
+impl Default for Packet {
+    fn default() -> Self {
+        Self {
+            sequence: Default::default(),
+            source_port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            source_channel_id: get_channel_id_str(0),
+            destination_port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            destination_channel_id: get_channel_id_str(0),
+            data: Default::default(),
+        }
+    }
+}
+
 impl Object for Packet {
     fn encode(&self) -> Vec<u8> {
         rlp::encode(self).to_vec()
@@ -145,13 +163,24 @@ impl Object for Packet {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone, RlpDecodable, RlpEncodable)]
+#[derive(Debug, PartialEq, Eq, Clone, RlpDecodable, RlpEncodable)]
 pub struct ConnectionEnd {
     pub state: State,
     pub client_id: String,
     pub counterparty: ConnectionCounterparty,
     pub delay_period: u64,
     // pub versions: Vec<String>,
+}
+
+impl Default for ConnectionEnd {
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+            client_id: String::from_utf8_lossy(&[0u8; 32].as_slice()).to_string(),
+            counterparty: Default::default(),
+            delay_period: Default::default(),
+        }
+    }
 }
 
 impl Object for ConnectionEnd {
