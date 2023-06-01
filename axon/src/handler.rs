@@ -1,5 +1,6 @@
 // These structs should only be used in CKB contracts.
 
+use crate::consts::CHANNEL_ID_PREFIX;
 use crate::message::Envelope;
 use crate::message::MsgAckInboxPacket;
 use crate::message::MsgAckOutboxPacket;
@@ -18,55 +19,65 @@ use crate::message::MsgType;
 use crate::object::ChannelCounterparty;
 use crate::object::ChannelEnd;
 use crate::object::ConnectionCounterparty;
+use crate::object::Object;
 use crate::object::Ordering;
 use crate::object::Packet;
 use crate::object::PacketAck;
 use crate::object::State;
 use crate::object::VerifyError;
-use crate::proof::Block;
-use crate::verify_object;
+use crate::proof::ObjectProof;
+use crate::ChannelArgs;
+use crate::ConnectionArgs;
+use crate::PacketArgs;
 
 // use axon_protocol::types::Bytes;
 use super::Bytes;
 use super::Vec;
 
+use alloc::string::String;
 use alloc::string::ToString;
-use cstr_core::CString;
 use ethereum_types::H256;
 use rlp::{decode, Decodable, Encodable};
+use rlp_derive::RlpDecodable;
+use rlp_derive::RlpEncodable;
 
 use super::object::ConnectionEnd;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcConnections {
     // pub connection_prefix: Bytes,
     pub channel_prefix: Bytes,
+    // can this be removed?
     pub next_connection_number: u16,
     pub next_channel_number: u16,
     pub connections: Vec<ConnectionEnd>,
 }
 
-impl Encodable for IbcConnections {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
-}
-
-impl Decodable for IbcConnections {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
-    }
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcChannel {
     pub num: u16,
-    pub port_id: CString,
+    // Since we use args of lock script in ckb cell to identify the port id,
+    // we do not need this field
+    pub port_id: String,
     pub state: State,
     pub order: Ordering,
     pub sequence: Sequence,
     pub counterparty: ChannelCounterparty,
     pub connection_hops: Vec<usize>,
+}
+
+impl Default for IbcChannel {
+    fn default() -> Self {
+        Self {
+            num: Default::default(),
+            port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            state: Default::default(),
+            order: Default::default(),
+            sequence: Default::default(),
+            counterparty: Default::default(),
+            connection_hops: Default::default(),
+        }
+    }
 }
 
 impl IbcChannel {
@@ -95,46 +106,45 @@ impl IbcChannel {
     }
 }
 
-impl Encodable for IbcChannel {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
-}
-
-impl Decodable for IbcChannel {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
-    }
-}
-
+#[derive(RlpEncodable, RlpDecodable)]
 pub struct IbcPacket {
     pub packet: Packet,
     pub tx_hash: Option<H256>,
     pub status: PacketStatus,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum PacketStatus {
-    Send,
+    Send = 1,
     Recv,
     Ack,
     InboxAck,
     OutboxAck,
 }
 
-impl Encodable for IbcPacket {
+impl Encodable for PacketStatus {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
+        let status = self.clone() as u8;
+        s.append(&status);
     }
 }
 
-impl Decodable for IbcPacket {
+impl Decodable for PacketStatus {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
+        let status: u8 = rlp.val_at(0)?;
+        match status {
+            1 => Ok(PacketStatus::Send),
+            2 => Ok(PacketStatus::Recv),
+            3 => Ok(PacketStatus::Ack),
+            4 => Ok(PacketStatus::InboxAck),
+            5 => Ok(PacketStatus::OutboxAck),
+            _ => Err(rlp::DecoderError::Custom("invalid packet status")),
+        }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct Sequence {
     pub next_send_packet: u16,
     pub next_recv_packet: u16,
@@ -250,51 +260,32 @@ impl Sequence {
     }
 }
 
-impl Encodable for Sequence {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
+pub trait Client {
+    fn client_id(&self) -> &[u8];
+
+    fn verify_object<O: Object>(&mut self, obj: O, proof: ObjectProof) -> Result<(), VerifyError>;
 }
 
-impl Decodable for Sequence {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Client {
-    pub id: CString,
-}
-
-impl Client {
-    pub fn verify_block(&self, block: Block) -> Result<(), VerifyError> {
-        todo!()
-    }
-}
-
-impl Encodable for Client {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        todo!()
-    }
-}
-
-impl Decodable for Client {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        todo!()
-    }
-}
-
-pub fn handle_msg_connection_open_init(
-    client: Client,
+pub fn handle_msg_connection_open_init<C: Client>(
+    client: C,
     old_connections: IbcConnections,
+    old_args: ConnectionArgs,
     new_connections: IbcConnections,
+    new_args: ConnectionArgs,
     _: MsgConnectionOpenInit,
 ) -> Result<(), VerifyError> {
     if old_connections.connections.len() + 1 != new_connections.connections.len()
         || old_connections.next_connection_number + 1 != new_connections.next_connection_number
     {
         return Err(VerifyError::WrongConnectionCnt);
+    }
+
+    if old_args != new_args {
+        return Err(VerifyError::WrongConnectionArgs);
+    }
+
+    if old_args.client_id.as_slice() != client.client_id() {
+        return Err(VerifyError::WrongConnectionArgs);
     }
 
     for i in 0..old_connections.connections.len() {
@@ -304,7 +295,7 @@ pub fn handle_msg_connection_open_init(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if connection.client_id != client.id {
+    if connection.client_id.as_bytes() != client.client_id() {
         return Err(VerifyError::WrongClient);
     }
 
@@ -315,16 +306,26 @@ pub fn handle_msg_connection_open_init(
     Ok(())
 }
 
-pub fn handle_msg_connection_open_try(
-    client: Client,
+pub fn handle_msg_connection_open_try<C: Client>(
+    mut client: C,
     old_connections: IbcConnections,
+    old_args: ConnectionArgs,
     new_connections: IbcConnections,
+    new_args: ConnectionArgs,
     msg: MsgConnectionOpenTry,
 ) -> Result<(), VerifyError> {
     if old_connections.connections.len() + 1 != new_connections.connections.len()
         || old_connections.next_connection_number + 1 != new_connections.next_connection_number
     {
         return Err(VerifyError::WrongConnectionCnt);
+    }
+
+    if old_args != new_args {
+        return Err(VerifyError::WrongConnectionArgs);
+    }
+
+    if old_args.client_id.as_slice() != client.client_id() {
+        return Err(VerifyError::WrongConnectionArgs);
     }
 
     for i in 0..old_connections.connections.len() {
@@ -346,7 +347,7 @@ pub fn handle_msg_connection_open_try(
         state: State::Init,
         client_id: connection.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: client.id.clone(),
+            client_id: String::from_utf8_lossy(client.client_id()).to_string(),
             connection_id: None,
         },
         delay_period: connection.delay_period.clone(),
@@ -354,21 +355,27 @@ pub fn handle_msg_connection_open_try(
 
     let object_proof = msg.proof.object_proof;
 
-    verify_object(
-        client,
-        expected_connection_end_on_counterparty,
-        object_proof,
-    )
+    client.verify_object(expected_connection_end_on_counterparty, object_proof)
 }
 
-pub fn handle_msg_connection_open_ack(
-    client: Client,
+pub fn handle_msg_connection_open_ack<C: Client>(
+    mut client: C,
     old: IbcConnections,
+    old_args: ConnectionArgs,
     new: IbcConnections,
+    new_args: ConnectionArgs,
     msg: MsgConnectionOpenAck,
 ) -> Result<(), VerifyError> {
     if old.connections.len() != new.connections.len() {
         return Err(VerifyError::WrongConnectionCnt);
+    }
+
+    if old_args != new_args {
+        return Err(VerifyError::WrongConnectionArgs);
+    }
+
+    if old_args.client_id.as_slice() != client.client_id() {
+        return Err(VerifyError::WrongConnectionArgs);
     }
 
     let conn_idx = msg.conn_id_on_a;
@@ -396,18 +403,20 @@ pub fn handle_msg_connection_open_ack(
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: client.id.clone(),
-            connection_id: Some(CString::new(conn_idx.to_string()).unwrap()),
+            client_id: String::from_utf8_lossy(client.client_id()).to_string(),
+            connection_id: Some(conn_idx.to_string()),
         },
         delay_period: new_connection.delay_period.clone(),
     };
-    verify_object(client, expected, msg.proof_conn_end_on_b.object_proof)
+    client.verify_object(expected, msg.proof_conn_end_on_b.object_proof)
 }
 
-pub fn handle_msg_connection_open_confirm(
-    client: Client,
+pub fn handle_msg_connection_open_confirm<C: Client>(
+    mut client: C,
     old: IbcConnections,
+    old_args: ConnectionArgs,
     new: IbcConnections,
+    new_args: ConnectionArgs,
     msg: MsgConnectionOpenConfirm,
 ) -> Result<(), VerifyError> {
     if old.connections.len() != new.connections.len() {
@@ -419,6 +428,14 @@ pub fn handle_msg_connection_open_confirm(
         if i != conn_idx && old.connections[i] != new.connections[i] {
             return Err(VerifyError::WrongClient);
         }
+    }
+
+    if old_args != new_args {
+        return Err(VerifyError::WrongConnectionArgs);
+    }
+
+    if old_args.client_id.as_slice() != client.client_id() {
+        return Err(VerifyError::WrongConnectionArgs);
     }
 
     let old_connection = &old.connections[conn_idx];
@@ -437,24 +454,42 @@ pub fn handle_msg_connection_open_confirm(
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: client.id.clone(),
-            connection_id: Some(CString::new(conn_idx.to_string()).unwrap()),
+            client_id: String::from_utf8_lossy(client.client_id()).to_string(),
+            connection_id: Some(conn_idx.to_string()),
         },
         delay_period: new_connection.delay_period.clone(),
     };
 
-    verify_object(client, expected, msg.proofs.object_proof)
+    client.verify_object(expected, msg.proofs.object_proof)
 }
 
-pub fn handle_channel_open_init_and_try(
-    client: Client,
+pub fn handle_channel_open_init_and_try<C: Client>(
+    client: C,
     channel: IbcChannel,
+    channel_args: ChannelArgs,
     envelop: Envelope,
     old_connections: IbcConnections,
+    old_connection_args: ConnectionArgs,
     new_connections: IbcConnections,
+    new_connection_args: ConnectionArgs,
 ) -> Result<(), VerifyError> {
     if old_connections.next_channel_number + 1 != new_connections.next_channel_number {
         return Err(VerifyError::WrongConnectionNextChannelNumber);
+    }
+    if old_connection_args != new_connection_args {
+        return Err(VerifyError::WrongConnectionArgs);
+    }
+
+    if old_connection_args.client_id.as_slice() != client.client_id() {
+        return Err(VerifyError::WrongConnectionArgs);
+    }
+
+    if channel_args.client_id != old_connection_args.client_id
+        || channel_args.open
+        || channel_args.channel_id != channel.num
+        || channel_args.port_id != channel.port_id.as_bytes()
+    {
+        return Err(VerifyError::WrongChannelArgs);
     }
 
     match envelop.msg_type {
@@ -472,8 +507,8 @@ pub fn handle_channel_open_init_and_try(
     }
 }
 
-pub fn handle_msg_channel_open_init(
-    client: Client,
+pub fn handle_msg_channel_open_init<C: Client>(
+    client: C,
     ibc_connections: &IbcConnections,
     new: IbcChannel,
     _msg: MsgChannelOpenInit,
@@ -484,7 +519,7 @@ pub fn handle_msg_channel_open_init(
     let conn_id = new.connection_hops[0];
     let conn = &ibc_connections.connections[conn_id];
 
-    if conn.client_id != client.id {
+    if conn.client_id.as_bytes() != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 
@@ -499,8 +534,8 @@ pub fn handle_msg_channel_open_init(
     Ok(())
 }
 
-pub fn handle_msg_channel_open_try(
-    client: Client,
+pub fn handle_msg_channel_open_try<C: Client>(
+    mut client: C,
     ibc_connections: &IbcConnections,
     new: IbcChannel,
     msg: MsgChannelOpenTry,
@@ -511,7 +546,7 @@ pub fn handle_msg_channel_open_try(
     let conn_id = new.connection_hops[0];
     let conn = &ibc_connections.connections[conn_id];
 
-    if conn.client_id != client.id {
+    if conn.client_id.as_bytes() != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 
@@ -528,20 +563,30 @@ pub fn handle_msg_channel_open_try(
         ordering: new.order,
         remote: ChannelCounterparty {
             port_id: new.port_id,
-            channel_id: CString::new(new.num.to_string()).unwrap(),
+            channel_id: new.num.to_string(),
         },
-        connection_hops: msg.connection_hops_on_a,
+        connection_hops: Vec::new(),
     };
 
-    verify_object(client, object, msg.proof_chan_end_on_a.object_proof)
+    client.verify_object(object, msg.proof_chan_end_on_a.object_proof)
 }
 
-pub fn handle_channel_open_ack_and_confirm(
-    client: Client,
+pub fn handle_channel_open_ack_and_confirm<C: Client>(
+    client: C,
     envelope: Envelope,
     old_channel: IbcChannel,
+    old_args: ChannelArgs,
     new_channel: IbcChannel,
+    new_args: ChannelArgs,
 ) -> Result<(), VerifyError> {
+    if old_args.open
+        || !new_args.open
+        || old_args.client_id != new_args.client_id
+        || old_args.channel_id != new_args.channel_id
+        || old_args.port_id != new_args.port_id
+    {
+        return Err(VerifyError::WrongChannelArgs);
+    }
     match envelope.msg_type {
         MsgType::MsgChannelOpenAck => {
             let msg = decode::<MsgChannelOpenAck>(&envelope.content)
@@ -557,8 +602,8 @@ pub fn handle_channel_open_ack_and_confirm(
     }
 }
 
-pub fn handle_msg_channel_open_ack(
-    client: Client,
+pub fn handle_msg_channel_open_ack<C: Client>(
+    mut client: C,
     old: IbcChannel,
     new: IbcChannel,
     msg: MsgChannelOpenAck,
@@ -576,16 +621,16 @@ pub fn handle_msg_channel_open_ack(
         ordering: new.order,
         remote: ChannelCounterparty {
             port_id: new.port_id,
-            channel_id: CString::new(new.num.to_string()).unwrap(),
+            channel_id: new.num.to_string(),
         },
-        connection_hops: msg.connection_hops_on_b,
+        connection_hops: Vec::new(),
     };
 
-    verify_object(client, object, msg.proofs.object_proof)
+    client.verify_object(object, msg.proofs.object_proof)
 }
 
-pub fn handle_msg_channel_open_confirm(
-    client: Client,
+pub fn handle_msg_channel_open_confirm<C: Client>(
+    mut client: C,
     old: IbcChannel,
     new: IbcChannel,
     msg: MsgChannelOpenConfirm,
@@ -602,23 +647,37 @@ pub fn handle_msg_channel_open_confirm(
         ordering: new.order,
         remote: ChannelCounterparty {
             port_id: new.port_id,
-            channel_id: CString::new(new.num.to_string()).unwrap(),
+            channel_id: new.num.to_string(),
         },
-        connection_hops: msg.connection_hops_on_b,
+        connection_hops: Vec::new(),
     };
 
-    verify_object(client, object, msg.proofs.object_proof)
+    client.verify_object(object, msg.proofs.object_proof)
 }
 
-pub fn handle_msg_send_packet(
-    _: Client,
+pub fn handle_msg_send_packet<C: Client>(
+    _: C,
     old_channel: IbcChannel,
+    old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
+    new_channel_args: ChannelArgs,
     ibc_packet: IbcPacket,
+    packet_args: PacketArgs,
     _: MsgSendPacket,
 ) -> Result<(), VerifyError> {
     if !old_channel.equal_unless_sequence(&new_channel) {
         return Err(VerifyError::WrongChannel);
+    }
+
+    if old_channel_args != new_channel_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    if packet_args.port_id != ibc_packet.packet.source_port_id.as_bytes()
+        || packet_args.sequence != ibc_packet.packet.sequence
+        || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
+    {
+        return Err(VerifyError::WrongPacketArgs);
     }
 
     if !old_channel
@@ -643,15 +702,29 @@ pub fn handle_msg_send_packet(
     return Ok(());
 }
 
-pub fn handle_msg_recv_packet(
-    client: Client,
+pub fn handle_msg_recv_packet<C: Client>(
+    mut client: C,
     old_channel: IbcChannel,
+    old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
+    new_channel_args: ChannelArgs,
     ibc_packet: IbcPacket,
+    packet_args: PacketArgs,
     msg: MsgRecvPacket,
 ) -> Result<(), VerifyError> {
     if !old_channel.equal_unless_sequence(&new_channel) {
         return Err(VerifyError::WrongChannel);
+    }
+
+    if old_channel_args != new_channel_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    if packet_args.port_id != ibc_packet.packet.source_port_id.as_bytes()
+        || packet_args.sequence != ibc_packet.packet.sequence
+        || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
+    {
+        return Err(VerifyError::WrongPacketArgs);
     }
 
     if !old_channel
@@ -673,21 +746,32 @@ pub fn handle_msg_recv_packet(
         return Err(VerifyError::WrongPacketStatus);
     }
 
-    verify_object(client, ibc_packet.packet, msg.proofs.object_proof)
+    client.verify_object(ibc_packet.packet, msg.proofs.object_proof)
 }
 
-pub fn handle_msg_ack_packet(
-    client: Client,
+pub fn handle_msg_ack_packet<C: Client>(
+    mut client: C,
     old_channel: IbcChannel,
+    old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
+    new_channel_args: ChannelArgs,
     old_ibc_packet: IbcPacket,
+    old_packet_args: PacketArgs,
     new_ibc_packet: IbcPacket,
+    new_packet_args: PacketArgs,
     msg: MsgAckPacket,
 ) -> Result<(), VerifyError> {
+    if old_channel_args != new_channel_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    if old_packet_args != new_packet_args {
+        return Err(VerifyError::WrongPacketArgs);
+    }
+
     if !old_channel.equal_unless_sequence(&new_channel) {
         return Err(VerifyError::WrongChannel);
     }
-
     if !old_channel.sequence.next_recv_ack_is(&new_channel.sequence) {
         return Err(VerifyError::WrongChannel);
     }
@@ -717,7 +801,7 @@ pub fn handle_msg_ack_packet(
         packet: new_ibc_packet.packet,
     };
 
-    verify_object(client, obj, msg.proofs.object_proof)
+    client.verify_object(obj, msg.proofs.object_proof)
 }
 
 pub fn handle_msg_ack_outbox_packet(
@@ -746,39 +830,76 @@ pub fn handle_msg_ack_inbox_packet(
     Ok(())
 }
 
+pub fn get_channel_id_str(idx: u16) -> String {
+    let mut result = String::from(CHANNEL_ID_PREFIX);
+    result.push_str(&idx.to_string());
+    result
+}
+
 #[cfg(test)]
 mod tests {
+
     use crate::object::Proofs;
 
     use super::*;
 
+    #[derive(Debug, Default)]
+    pub struct TestClient {
+        client: [u8; 32],
+    }
+
+    impl Client for TestClient {
+        fn verify_object<O: Object>(
+            &mut self,
+            _obj: O,
+            _proof: ObjectProof,
+        ) -> Result<(), VerifyError> {
+            Ok(())
+        }
+
+        fn client_id(&self) -> &[u8] {
+            self.client.as_slice()
+        }
+    }
+
     #[test]
     fn test_handle_msg_connection_open_init() {
-        let client = Client::default();
+        let client = TestClient::default();
 
         let old_connections = IbcConnections::default();
         let mut new_connections = IbcConnections::default();
         new_connections.connections.push(ConnectionEnd {
             state: State::Init,
-            client_id: Default::default(),
+            client_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
             counterparty: Default::default(),
             delay_period: Default::default(),
         });
         new_connections.next_connection_number += 1;
 
+        let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+        let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+
         let msg = MsgConnectionOpenInit {};
-        handle_msg_connection_open_init(client, old_connections, new_connections, msg).unwrap();
+        handle_msg_connection_open_init(
+            client,
+            old_connections,
+            old_args,
+            new_connections,
+            new_args,
+            msg,
+        )
+        .unwrap();
     }
 
     #[test]
     fn test_handle_msg_connection_open_try() {
-        let client = Client::default();
+        let client = TestClient::default();
 
         let old_connections = IbcConnections::default();
         let mut new_connections = IbcConnections::default();
         new_connections.connections.push(ConnectionEnd {
             state: State::OpenTry,
-            client_id: Default::default(),
+            client_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
             counterparty: Default::default(),
             delay_period: Default::default(),
         });
@@ -787,19 +908,27 @@ mod tests {
         let msg = MsgConnectionOpenTry {
             proof: Proofs::default(),
         };
+        let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+        let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
 
-        handle_msg_connection_open_try(client, old_connections, new_connections, msg).unwrap();
+        handle_msg_connection_open_try(
+            client,
+            old_connections,
+            old_args,
+            new_connections,
+            new_args,
+            msg,
+        )
+        .unwrap();
     }
 
     #[test]
     fn test_handle_msg_connection_open_ack() {
-        let client = Client::default();
+        let client = TestClient::default();
 
         let msg = MsgConnectionOpenAck {
             conn_id_on_a: 1,
-            client_state_of_a_on_b: Default::default(),
             proof_conn_end_on_b: Default::default(),
-            version: Default::default(),
         };
 
         let dummy_connection_end = ConnectionEnd::default();
@@ -828,12 +957,22 @@ mod tests {
             .connections
             .push(dummy_connection_end.clone());
 
-        handle_msg_connection_open_ack(client, old_connections, new_connections, msg).unwrap();
+        let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+        let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+        handle_msg_connection_open_ack(
+            client,
+            old_connections,
+            old_args,
+            new_connections,
+            new_args,
+            msg,
+        )
+        .unwrap();
     }
 
     #[test]
     fn test_handle_msg_connection_open_confirm() {
-        let client = Client::default();
+        let client = TestClient::default();
 
         let msg = MsgConnectionOpenConfirm {
             conn_id_on_b: 1,
@@ -865,13 +1004,23 @@ mod tests {
         new_connections
             .connections
             .push(dummy_connection_end.clone());
+        let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+        let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
 
-        handle_msg_connection_open_confirm(client, old_connections, new_connections, msg).unwrap();
+        handle_msg_connection_open_confirm(
+            client,
+            old_connections,
+            old_args,
+            new_connections,
+            new_args,
+            msg,
+        )
+        .unwrap();
     }
 
     #[test]
     fn test_handle_msg_channel_open_init() {
-        let client = Client::default();
+        let client = TestClient::default();
 
         let mut new_connections = IbcConnections::default();
         new_connections.next_channel_number += 1;
@@ -890,7 +1039,7 @@ mod tests {
 
     #[test]
     fn test_handle_msg_channel_open_try_success() {
-        let client = Client::default();
+        let client = TestClient::default();
 
         let mut new_connections = IbcConnections::default();
         new_connections.next_channel_number += 1;
@@ -905,14 +1054,13 @@ mod tests {
 
         let msg = MsgChannelOpenTry {
             proof_chan_end_on_a: Proofs::default(),
-            connection_hops_on_a: Vec::new(),
         };
         handle_msg_channel_open_try(client, &new_connections, channel, msg).unwrap()
     }
 
     #[test]
     fn test_handle_msg_channel_open_ack_success() {
-        let client = Client::default();
+        let client = TestClient::default();
         let mut old_channel = IbcChannel::default();
         old_channel.state = State::Init;
 
@@ -920,9 +1068,7 @@ mod tests {
         new_channel.state = State::Open;
 
         let msg = MsgChannelOpenAck {
-            chain_id_on_b: CString::default(),
             proofs: Proofs::default(),
-            connection_hops_on_b: Vec::new(),
         };
 
         handle_msg_channel_open_ack(client, old_channel, new_channel, msg).unwrap();
@@ -930,7 +1076,7 @@ mod tests {
 
     #[test]
     fn handle_msg_channel_open_confirm_success() {
-        let client = Client::default();
+        let client = TestClient::default();
         let mut old_channel = IbcChannel::default();
         old_channel.state = State::OpenTry;
 
@@ -939,7 +1085,6 @@ mod tests {
 
         let msg = MsgChannelOpenConfirm {
             proofs: Proofs::default(),
-            connection_hops_on_b: Vec::new(),
         };
 
         handle_msg_channel_open_confirm(client, old_channel, new_channel, msg).unwrap();
@@ -947,7 +1092,7 @@ mod tests {
 
     #[test]
     fn handle_msg_channel_open_confirm_channel_unmatch() {
-        let client = Client::default();
+        let client = TestClient::default();
         let mut old_channel = IbcChannel::default();
         old_channel.state = State::OpenTry;
 
@@ -958,7 +1103,6 @@ mod tests {
 
         let msg = MsgChannelOpenConfirm {
             proofs: Proofs::default(),
-            connection_hops_on_b: Vec::new(),
         };
 
         if let Err(VerifyError::WrongChannel) =
@@ -971,7 +1115,7 @@ mod tests {
 
     #[test]
     fn test_handle_msg_send_packet_success() {
-        let client = Client::default();
+        let client = TestClient::default();
 
         let mut seq2 = Sequence::default();
         seq2.next_send_packet += 1;
@@ -992,7 +1136,21 @@ mod tests {
             status: PacketStatus::Send,
         };
 
-        handle_msg_send_packet(client, old_channel, new_channel, ibc_packet, msg).unwrap();
+        let old_channel_args = ChannelArgs::default();
+        let new_channel_args = ChannelArgs::default();
+        let packet_args = PacketArgs::default();
+
+        handle_msg_send_packet(
+            client,
+            old_channel,
+            old_channel_args,
+            new_channel,
+            new_channel_args,
+            ibc_packet,
+            packet_args,
+            msg,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -1017,11 +1175,19 @@ mod tests {
             tx_hash: None,
             status: PacketStatus::Recv,
         };
+        let old_channel_args = ChannelArgs::default();
+        let new_channel_args = ChannelArgs::default();
+        let mut packet_args = PacketArgs::default();
+        packet_args.sequence += 1;
+
         handle_msg_recv_packet(
-            Client::default(),
+            TestClient::default(),
             old_channel,
+            old_channel_args,
             new_channel,
+            new_channel_args,
             ibc_packet,
+            packet_args,
             MsgRecvPacket {
                 proofs: Proofs::default(),
             },
