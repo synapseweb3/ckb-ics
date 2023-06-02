@@ -103,21 +103,29 @@ pub struct PacketArgs {
     pub channel_id: u16,
     pub port_id: [u8; 32],
     pub sequence: u16,
+    // Who pay for this capacity, the secp256k1 args
+    pub owner: [u8; 32],
 }
 
 impl PacketArgs {
     pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
-        if slice.len() != 36 {
+        if slice.len() != 68 {
             return Err(());
         }
         let channel_id = u16::from_le_bytes(slice[0..2].try_into().unwrap());
         let port_id = slice[2..34].try_into().unwrap();
         let sequence = u16::from_le_bytes(slice[34..36].try_into().unwrap());
+        let owner: [u8; 32] = slice[36..68].try_into().unwrap();
         Ok(PacketArgs {
             channel_id,
             port_id,
             sequence,
+            owner,
         })
+    }
+
+    pub fn get_owner(&self) -> [u8; 32] {
+        self.owner.clone()
     }
 
     pub fn to_args(self) -> Vec<u8> {
@@ -125,6 +133,7 @@ impl PacketArgs {
         result.extend(self.channel_id.to_le_bytes());
         result.extend(self.port_id);
         result.extend(self.sequence.to_le_bytes());
+        result.extend(self.owner);
         result
     }
 }

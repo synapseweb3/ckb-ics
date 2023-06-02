@@ -806,7 +806,9 @@ pub fn handle_msg_ack_packet<C: Client>(
 
 pub fn handle_msg_ack_outbox_packet(
     old_ibc_packet: IbcPacket,
+    old_packet_args: PacketArgs,
     new_ibc_packet: IbcPacket,
+    new_packet_args: PacketArgs,
     _: MsgAckOutboxPacket,
 ) -> Result<(), VerifyError> {
     if old_ibc_packet.status != PacketStatus::Recv
@@ -816,6 +818,9 @@ pub fn handle_msg_ack_outbox_packet(
     }
     if old_ibc_packet.packet != new_ibc_packet.packet {
         return Err(VerifyError::WrongPacketContent);
+    }
+    if old_packet_args != new_packet_args {
+        return Err(VerifyError::WrongPacketArgs);
     }
     Ok(())
 }
@@ -1210,7 +1215,9 @@ mod tests {
         };
         handle_msg_ack_outbox_packet(
             old_ibc_packet,
+            PacketArgs::default(),
             new_ibc_packet,
+            PacketArgs::default(),
             MsgAckOutboxPacket { ack: Vec::new() },
         )
         .unwrap();
@@ -1233,7 +1240,9 @@ mod tests {
         };
         if let Err(VerifyError::WrongPacketContent) = handle_msg_ack_outbox_packet(
             old_ibc_packet,
+            PacketArgs::default(),
             new_ibc_packet,
+            PacketArgs::default(),
             MsgAckOutboxPacket { ack: Vec::new() },
         ) {
         } else {
