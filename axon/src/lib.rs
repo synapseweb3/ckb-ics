@@ -124,6 +124,14 @@ impl PacketArgs {
         })
     }
 
+    pub fn get_search_args(self) -> Vec<u8> {
+        let mut result = Vec::new();
+        result.extend(self.channel_id.to_le_bytes());
+        result.extend(self.port_id);
+        result.extend(self.sequence.to_le_bytes());
+        result
+    }
+
     pub fn get_owner(&self) -> [u8; 32] {
         self.owner.clone()
     }
