@@ -1,6 +1,11 @@
 #![no_std]
+
+#[macro_use]
 extern crate alloc;
 
+use core::str::FromStr;
+
+use alloc::string::String;
 pub use alloc::vec::Vec;
 
 pub mod consts;
@@ -41,7 +46,7 @@ impl ConnectionArgs {
 }
 
 // The args of the channel cell's script
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct ChannelArgs {
     pub client_id: [u8; 32],
     // For the sake of convenience, we use a bool here to describe
@@ -72,7 +77,7 @@ impl ChannelArgs {
 
     pub fn get_prefix_for_searching_unopen(&self) -> Vec<u8> {
         let mut result = self.client_id.to_vec();
-        let open: u8 = if self.open { 0 } else { 1 };
+        let open: u8 = if self.open { 1 } else { 0 };
         result.push(open);
         result
     }
@@ -83,7 +88,7 @@ impl ChannelArgs {
 
     pub fn is_open(data: Vec<u8>) -> Result<bool, ()> {
         let open_byte = data.get(33).ok_or(())?;
-        if *open_byte == 0 {
+        if *open_byte == 1 {
             Ok(true)
         } else {
             Ok(false)
@@ -203,5 +208,46 @@ pub fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
     } else {
         // Choice of `u8` type here is arbitrary as all empty lists are encoded the same.
         rlp.append_list::<u8, u8>(&[]);
+    }
+}
+
+pub fn convert_client_id_to_string(client_id: [u8; 32]) -> String {
+    let s = format!("{:x}", H256::from(client_id));
+    s
+}
+
+pub fn convert_string_to_client_id(s: &str) -> [u8; 32] {
+    let a = H256::from_str(s).unwrap().into();
+    a
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ChannelArgs;
+
+    use super::{convert_client_id_to_string, convert_string_to_client_id};
+
+    #[test]
+    fn client_id_to_string() {
+        let actual = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30, 31, 32,
+        ];
+        let s = convert_client_id_to_string(actual);
+        let r = convert_string_to_client_id(&s);
+        assert_eq!(actual, r);
+    }
+
+    #[test]
+    fn channel_args_conversion() {
+        let channel_args = ChannelArgs {
+            client_id: [1; 32],
+            open: true,
+            channel_id: 23,
+            port_id: [2; 32],
+        };
+        let slice = channel_args.clone().to_args();
+        let actual = ChannelArgs::from_slice(&slice).unwrap();
+        assert_eq!(channel_args, actual);
     }
 }

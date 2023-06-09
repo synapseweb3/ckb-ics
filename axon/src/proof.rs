@@ -18,6 +18,7 @@ pub struct ObjectProof {
 
 impl Encodable for ObjectProof {
     fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(5);
         s.append(&self.receipt)
             .append_list::<Vec<_>, Vec<_>>(&self.receipt_proof)
             .append_list(&self.block)
@@ -195,5 +196,17 @@ fn normalize_v(v: u64, chain_id: U64) -> u64 {
         v - chain_id.as_u64() * 2 - 35
     } else {
         v
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ObjectProof;
+
+    #[test]
+    fn test_object_proof_serde() {
+        let object_proof = ObjectProof::default();
+        let bytes = rlp::encode(&object_proof);
+        rlp::decode::<ObjectProof>(&bytes).unwrap();
     }
 }
