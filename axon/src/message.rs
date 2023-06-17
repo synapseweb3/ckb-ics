@@ -126,7 +126,7 @@ pub struct MsgConnectionOpenAck {
     // This message just convey the idx of the connection cell of it
     // and the content of that cell would be stored in witness of the tx.
     pub conn_id_on_a: usize,
-    // pub conn_id_on_b: CString,
+    // pub conn_id_on_b: String,
     // pub client_state_of_a_on_b: ClientState,
     pub proof_conn_end_on_b: Proofs,
     // pub version: CString,

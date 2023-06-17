@@ -1,3 +1,4 @@
+use crate::convert_client_id_to_string;
 use crate::handler::get_channel_id_str;
 use crate::proof::ObjectProof;
 use alloc::string::String;
@@ -60,13 +61,14 @@ pub enum State {
 impl Encodable for State {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
         let state = self.clone() as u8;
+        s.begin_list(1);
         s.append(&state);
     }
 }
 
 impl Decodable for State {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        let state: u8 = rlp.as_val()?;
+        let state: u8 = rlp.val_at(0)?;
         match state {
             1 => Ok(State::Unknown),
             2 => Ok(State::Init),
@@ -91,13 +93,14 @@ pub enum Ordering {
 impl Encodable for Ordering {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
         let ordering = self.clone() as u8;
+        s.begin_list(1);
         s.append(&ordering);
     }
 }
 
 impl Decodable for Ordering {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        let ordering: u8 = rlp.as_val()?;
+        let ordering: u8 = rlp.val_at(0)?;
         match ordering {
             1 => Ok(Ordering::Unknown),
             2 => Ok(Ordering::Unordered),
@@ -163,7 +166,7 @@ impl Object for Packet {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, RlpDecodable, RlpEncodable)]
+#[derive(Debug, PartialEq, Eq, Clone, RlpEncodable, RlpDecodable)]
 pub struct ConnectionEnd {
     pub state: State,
     pub client_id: String,
@@ -176,7 +179,7 @@ impl Default for ConnectionEnd {
     fn default() -> Self {
         Self {
             state: Default::default(),
-            client_id: String::from_utf8_lossy(&[0u8; 32].as_slice()).to_string(),
+            client_id: convert_client_id_to_string([0u8; 32]),
             counterparty: Default::default(),
             delay_period: Default::default(),
         }
