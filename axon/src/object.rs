@@ -60,7 +60,7 @@ pub enum State {
 
 impl Encodable for State {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        let state = self.clone() as u8;
+        let state = *self as u8;
         s.begin_list(1);
         s.append(&state);
     }
@@ -92,7 +92,7 @@ pub enum Ordering {
 
 impl Encodable for Ordering {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        let ordering = self.clone() as u8;
+        let ordering = *self as u8;
         s.begin_list(1);
         s.append(&ordering);
     }

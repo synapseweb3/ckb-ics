@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::result_unit_err)]
 
 #[macro_use]
 extern crate alloc;
@@ -138,7 +139,7 @@ impl PacketArgs {
     }
 
     pub fn get_owner(&self) -> [u8; 32] {
-        self.owner.clone()
+        self.owner
     }
 
     pub fn to_args(self) -> Vec<u8> {
@@ -175,11 +176,7 @@ fn verify_receipt<O: Object>(
     proof: Vec<Vec<u8>>,
     idx: u64,
 ) -> Result<(), VerifyError> {
-    let actual = receipt
-        .logs
-        .iter()
-        .next()
-        .ok_or(VerifyError::FoundNoMessage)?;
+    let actual = receipt.logs.first().ok_or(VerifyError::FoundNoMessage)?;
 
     if expect.encode() != actual.data.as_ref() {
         return Err(VerifyError::EventNotMatch);
@@ -212,13 +209,24 @@ pub fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
 }
 
 pub fn convert_client_id_to_string(client_id: [u8; 32]) -> String {
-    let s = format!("{:x}", H256::from(client_id));
-    s
+    format!("{:x}", H256::from(client_id))
 }
 
 pub fn convert_string_to_client_id(s: &str) -> [u8; 32] {
-    let a = H256::from_str(s).unwrap().into();
-    a
+    H256::from_str(s).unwrap().into()
+}
+
+pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, VerifyError> {
+    let index_str = connection_id
+        .split('-')
+        .last()
+        .ok_or(VerifyError::ConnectionsWrong)?;
+    let index = usize::from_str(index_str).map_err(|_| VerifyError::ConnectionsWrong)?;
+    Ok(index)
+}
+
+pub fn index_to_connection_id(index: usize) -> String {
+    format!("{}{index}", consts::CONNECTION_ID_PREFIX)
 }
 
 #[cfg(test)]

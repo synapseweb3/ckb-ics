@@ -1,6 +1,8 @@
 // These structs should only be used in CKB contracts.
+#![allow(clippy::too_many_arguments)]
 
 use crate::consts::CHANNEL_ID_PREFIX;
+use crate::convert_connection_id_to_index;
 use crate::convert_string_to_client_id;
 use crate::message::Envelope;
 use crate::message::MsgAckInboxPacket;
@@ -64,7 +66,7 @@ pub struct IbcChannel {
     pub order: Ordering,
     pub sequence: Sequence,
     pub counterparty: ChannelCounterparty,
-    pub connection_hops: Vec<usize>,
+    pub connection_hops: Vec<String>,
 }
 
 impl Default for IbcChannel {
@@ -90,7 +92,7 @@ impl IbcChannel {
         {
             return false;
         }
-        return true;
+        true
     }
 
     pub fn equal_unless_sequence(&self, other: &Self) -> bool {
@@ -102,7 +104,7 @@ impl IbcChannel {
         {
             return false;
         }
-        return true;
+        true
     }
 }
 
@@ -125,7 +127,7 @@ pub enum PacketStatus {
 
 impl Encodable for PacketStatus {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        let status = self.clone() as u8;
+        let status = *self as u8;
         s.append(&status);
     }
 }
@@ -186,7 +188,7 @@ impl Sequence {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     pub fn next_recv_packet_is(&self, new: &Self) -> bool {
@@ -221,7 +223,7 @@ impl Sequence {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     pub fn next_recv_ack_is(&self, new: &Self) -> bool {
@@ -256,7 +258,7 @@ impl Sequence {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 
@@ -354,7 +356,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
             client_id: String::from_utf8_lossy(client.client_id()).to_string(),
             connection_id: None,
         },
-        delay_period: connection.delay_period.clone(),
+        delay_period: connection.delay_period,
     };
 
     let object_proof = msg.proof.object_proof;
@@ -414,7 +416,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
             client_id: String::from_utf8_lossy(client.client_id()).to_string(),
             connection_id: Some(conn_idx.to_string()),
         },
-        delay_period: new_connection.delay_period.clone(),
+        delay_period: new_connection.delay_period,
     };
     client.verify_object(expected, msg.proof_conn_end_on_b.object_proof)
 }
@@ -465,7 +467,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
             client_id: String::from_utf8_lossy(client.client_id()).to_string(),
             connection_id: Some(conn_idx.to_string()),
         },
-        delay_period: new_connection.delay_period.clone(),
+        delay_period: new_connection.delay_period,
     };
 
     client.verify_object(expected, msg.proofs.object_proof)
@@ -521,10 +523,10 @@ pub fn handle_msg_channel_open_init<C: Client>(
     new: IbcChannel,
     _msg: MsgChannelOpenInit,
 ) -> Result<(), VerifyError> {
-    if new.connection_hops.len() == 0 {
+    if new.connection_hops.is_empty() {
         return Err(VerifyError::ConnectionsWrong);
     }
-    let conn_id = new.connection_hops[0];
+    let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
     if convert_string_to_client_id(&conn.client_id) != client.client_id() {
@@ -548,10 +550,10 @@ pub fn handle_msg_channel_open_try<C: Client>(
     new: IbcChannel,
     msg: MsgChannelOpenTry,
 ) -> Result<(), VerifyError> {
-    if new.connection_hops.len() == 0 {
+    if new.connection_hops.is_empty() {
         return Err(VerifyError::ConnectionsWrong);
     }
-    let conn_id = new.connection_hops[0];
+    let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
     if convert_string_to_client_id(&conn.client_id) != client.client_id() {
@@ -711,7 +713,7 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongPacketSequence);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 pub fn handle_msg_recv_packet<C: Client>(
@@ -856,7 +858,7 @@ pub fn get_channel_id_str(idx: u16) -> String {
 #[cfg(test)]
 mod tests {
 
-    use crate::{convert_client_id_to_string, object::Proofs};
+    use crate::{convert_client_id_to_string, index_to_connection_id, object::Proofs};
 
     use super::*;
 
@@ -1052,7 +1054,7 @@ mod tests {
 
         let mut channel = IbcChannel::default();
         channel.state = State::Init;
-        channel.connection_hops.push(0);
+        channel.connection_hops.push(index_to_connection_id(0));
 
         let msg = MsgChannelOpenInit {};
         handle_msg_channel_open_init(client, &new_connections, channel, msg).unwrap();
@@ -1070,7 +1072,7 @@ mod tests {
         new_connections.connections.push(connection_end);
 
         let mut channel = IbcChannel::default();
-        channel.connection_hops.push(0);
+        channel.connection_hops.push(index_to_connection_id(0));
         channel.state = State::OpenTry;
 
         let msg = MsgChannelOpenTry {
@@ -1121,7 +1123,7 @@ mod tests {
                 ),
                 channel_id: String::from(""),
             },
-            connection_hops: vec![0],
+            connection_hops: vec![index_to_connection_id(0)],
         };
         let new_channel = IbcChannel {
             num: 0,
@@ -1141,9 +1143,9 @@ mod tests {
                 port_id: String::from(
                     "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
                 ),
-                channel_id: String::from("ckb4ibc-channel-1"),
+                channel_id: String::from("channel-1"),
             },
-            connection_hops: vec![0],
+            connection_hops: vec![index_to_connection_id(0)],
         };
 
         let old_args = ChannelArgs {
