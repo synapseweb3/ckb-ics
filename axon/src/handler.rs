@@ -297,7 +297,7 @@ pub fn handle_msg_connection_open_init<C: Client>(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if convert_string_to_client_id(&connection.client_id) != client.client_id() {
+    if convert_string_to_client_id(&connection.client_id)? != client.client_id() {
         return Err(VerifyError::WrongClient);
     }
 
@@ -337,7 +337,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if convert_string_to_client_id(&connection.client_id) != client.client_id() {
+    if convert_string_to_client_id(&connection.client_id)? != client.client_id() {
         return Err(VerifyError::WrongClient);
     }
 
@@ -529,7 +529,7 @@ pub fn handle_msg_channel_open_init<C: Client>(
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
-    if convert_string_to_client_id(&conn.client_id) != client.client_id() {
+    if convert_string_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 
@@ -556,7 +556,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
-    if convert_string_to_client_id(&conn.client_id) != client.client_id() {
+    if convert_string_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 

@@ -212,8 +212,10 @@ pub fn convert_client_id_to_string(client_id: [u8; 32]) -> String {
     format!("{:x}", H256::from(client_id))
 }
 
-pub fn convert_string_to_client_id(s: &str) -> [u8; 32] {
-    H256::from_str(s).unwrap().into()
+pub fn convert_string_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
+    Ok(H256::from_str(s)
+        .map_err(|_| VerifyError::WrongClient)?
+        .into())
 }
 
 pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, VerifyError> {
@@ -242,7 +244,7 @@ mod tests {
             25, 26, 27, 28, 29, 30, 31, 32,
         ];
         let s = convert_client_id_to_string(actual);
-        let r = convert_string_to_client_id(&s);
+        let r = convert_string_to_client_id(&s).unwrap();
         assert_eq!(actual, r);
     }
 
