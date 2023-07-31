@@ -1,43 +1,25 @@
 // These structs should only be used in CKB contracts.
 #![allow(clippy::too_many_arguments)]
 
-use crate::consts::CHANNEL_ID_PREFIX;
-use crate::consts::COMMITMENT_PREFIX;
-use crate::convert_connection_id_to_index;
-use crate::convert_string_to_client_id;
-use crate::message::Envelope;
-use crate::message::MsgAckInboxPacket;
-use crate::message::MsgAckOutboxPacket;
-use crate::message::MsgAckPacket;
-use crate::message::MsgChannelOpenAck;
-use crate::message::MsgChannelOpenConfirm;
-use crate::message::MsgChannelOpenInit;
-use crate::message::MsgChannelOpenTry;
-use crate::message::MsgConnectionOpenAck;
-use crate::message::MsgConnectionOpenConfirm;
-use crate::message::MsgConnectionOpenInit;
-use crate::message::MsgConnectionOpenTry;
-use crate::message::MsgRecvPacket;
-use crate::message::MsgSendPacket;
-use crate::message::MsgType;
-use crate::object::ChannelCounterparty;
-use crate::object::ChannelEnd;
-use crate::object::ConnectionCounterparty;
-use crate::object::Object;
-use crate::object::Ordering;
-use crate::object::Packet;
-use crate::object::PacketAck;
-use crate::object::State;
-use crate::object::VerifyError;
+use crate::consts::{CHANNEL_ID_PREFIX, COMMITMENT_PREFIX};
+use crate::message::{
+    Envelope, MsgAckInboxPacket, MsgAckOutboxPacket, MsgAckPacket, MsgChannelOpenAck,
+    MsgChannelOpenConfirm, MsgChannelOpenInit, MsgChannelOpenTry, MsgConnectionOpenAck,
+    MsgConnectionOpenConfirm, MsgConnectionOpenInit, MsgConnectionOpenTry, MsgRecvPacket,
+    MsgSendPacket, MsgType,
+};
+use crate::object::{
+    ChannelCounterparty, ChannelEnd, ConnectionCounterparty, Object, Ordering, Packet, PacketAck,
+    State, VerifyError,
+};
 use crate::proof::ObjectProof;
-use crate::ChannelArgs;
-use crate::ConnectionArgs;
-use crate::PacketArgs;
+use crate::{convert_connection_id_to_index, convert_string_to_client_id};
+use crate::{ChannelArgs, ConnectionArgs, PacketArgs};
 
 // use axon_protocol::types::Bytes;
-use super::Bytes;
 use super::Vec;
 
+use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::string::ToString;
 use ethereum_types::H256;
@@ -49,9 +31,7 @@ use super::object::ConnectionEnd;
 
 #[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcConnections {
-    // pub connection_prefix: Bytes,
-    pub channel_prefix: Bytes,
-    // can this be removed?
+    // TODO: can this be removed?
     pub next_connection_number: u16,
     pub next_channel_number: u16,
     pub connections: Vec<ConnectionEnd>,
@@ -59,12 +39,14 @@ pub struct IbcConnections {
 
 #[derive(Debug, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcChannel {
-    pub num: u16,
-    // Since we use args of lock script in ckb cell to identify the port id,
-    // we do not need this field
+    pub number: u16,
+    // TODO: can this be removed?
     pub port_id: String,
     pub state: State,
     pub order: Ordering,
+    // FIXME: due to the limit of CKB cell-model, there's limiation that one channel should pair
+    //        only one port to fit the sequence field's uniqueness, otherwise we have to introdue
+    //        a port cell to maintain this sequence field (refactor require)
     pub sequence: Sequence,
     pub counterparty: ChannelCounterparty,
     pub connection_hops: Vec<String>,
@@ -73,7 +55,7 @@ pub struct IbcChannel {
 impl Default for IbcChannel {
     fn default() -> Self {
         Self {
-            num: Default::default(),
+            number: Default::default(),
             port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
             state: Default::default(),
             order: Default::default(),
@@ -86,19 +68,19 @@ impl Default for IbcChannel {
 
 impl IbcChannel {
     pub fn equal_unless_state_and_counterparty(&self, other: &Self) -> bool {
-        (self.num, &self.port_id, self.order, &self.sequence)
-            == (other.num, &other.port_id, other.order, &other.sequence)
+        (self.number, &self.port_id, self.order, &self.sequence)
+            == (other.number, &other.port_id, other.order, &other.sequence)
     }
 
     pub fn equal_unless_sequence(&self, other: &Self) -> bool {
         (
-            self.num,
+            self.number,
             &self.port_id,
             self.order,
             self.state,
             &self.counterparty,
         ) == (
-            other.num,
+            other.number,
             &other.port_id,
             other.order,
             other.state,
@@ -147,116 +129,83 @@ impl Decodable for PacketStatus {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct Sequence {
-    pub next_send_packet: u16,
-    pub next_recv_packet: u16,
-    pub next_recv_ack: u16,
-    pub unorder_recv_packet: Vec<u16>,
-    pub unorder_recv_ack: Vec<u16>,
+    pub next_sequence_sends: u16,
+    pub next_sequence_recvs: u16,
+    pub next_sequence_acks: u16,
+    pub received_sequences: Vec<u16>,
 }
 
 impl Sequence {
     pub fn next_send_packet_is(&self, new: &Self) -> bool {
-        if self.next_send_packet + 1 != new.next_send_packet {
+        if self.next_sequence_sends + 1 != new.next_sequence_sends
+            || self.next_sequence_recvs != new.next_sequence_recvs
+            || self.next_sequence_acks != new.next_sequence_acks
+        {
             return false;
         }
 
-        if self.next_recv_packet != new.next_recv_packet {
+        let old_received = self.received_sequences.iter().collect::<BTreeSet<_>>();
+        let new_received = new.received_sequences.iter().collect::<BTreeSet<_>>();
+
+        if old_received.len() != self.received_sequences.len()
+            || new_received.len() != new.received_sequences.len()
+            || old_received != new_received
+        {
             return false;
         }
 
-        if self.next_recv_ack != new.next_recv_ack {
-            return false;
-        }
-
-        if self.unorder_recv_packet.len() != new.unorder_recv_packet.len() {
-            return false;
-        }
-
-        for i in 0..self.unorder_recv_packet.len() {
-            if self.unorder_recv_packet[i] != new.unorder_recv_packet[i] {
-                return false;
-            }
-        }
-
-        if self.unorder_recv_ack.len() != new.unorder_recv_ack.len() {
-            return false;
-        }
-
-        for j in 0..self.unorder_recv_ack.len() {
-            if self.unorder_recv_ack[j] != new.unorder_recv_ack[j] {
-                return false;
-            }
-        }
         true
     }
 
-    pub fn next_recv_packet_is(&self, new: &Self) -> bool {
-        if self.next_send_packet != new.next_send_packet {
+    pub fn next_recv_packet_is(&self, new: &Self, unorder_sequence: Option<u16>) -> bool {
+        if self.next_sequence_sends != new.next_sequence_sends
+            || self.next_sequence_acks != new.next_sequence_acks
+        {
             return false;
         }
 
-        if self.next_recv_packet + 1 != new.next_recv_packet {
-            return false;
-        }
+        if let Some(sequence) = unorder_sequence {
+            let old_received = self.received_sequences.iter().collect::<BTreeSet<_>>();
+            let new_received = new.received_sequences.iter().collect::<BTreeSet<_>>();
 
-        if self.next_recv_ack != new.next_recv_ack {
-            return false;
-        }
-
-        if self.unorder_recv_packet.len() != new.unorder_recv_packet.len() {
-            return false;
-        }
-
-        for i in 0..self.unorder_recv_packet.len() {
-            if self.unorder_recv_packet[i] != new.unorder_recv_packet[i] {
+            if old_received.len() != self.received_sequences.len()
+                || new_received.len() != new.received_sequences.len()
+                || new_received.len() != old_received.len() + 1
+            {
                 return false;
             }
-        }
 
-        if self.unorder_recv_ack.len() != new.unorder_recv_ack.len() {
+            if old_received.contains(&sequence) || !new_received.contains(&sequence) {
+                return false;
+            }
+        } else if self.next_sequence_recvs + 1 != new.next_sequence_recvs {
             return false;
         }
 
-        for j in 0..self.unorder_recv_ack.len() {
-            if self.unorder_recv_ack[j] != new.unorder_recv_ack[j] {
-                return false;
-            }
-        }
         true
     }
 
-    pub fn next_recv_ack_is(&self, new: &Self) -> bool {
-        if self.next_send_packet != new.next_send_packet {
+    pub fn next_recv_ack_is(&self, new: &Self, is_unorder: bool) -> bool {
+        if self.next_sequence_sends != new.next_sequence_sends
+            || self.next_sequence_recvs != new.next_sequence_recvs
+        {
             return false;
         }
 
-        if self.next_recv_packet != new.next_recv_packet {
+        if !is_unorder && self.next_sequence_acks + 1 != new.next_sequence_acks {
             return false;
         }
 
-        if self.next_recv_ack + 1 != new.next_recv_ack {
+        let old_received = self.received_sequences.iter().collect::<BTreeSet<_>>();
+        let new_received = new.received_sequences.iter().collect::<BTreeSet<_>>();
+
+        if old_received.len() != self.received_sequences.len()
+            || new_received.len() != new.received_sequences.len()
+            || old_received != new_received
+        {
             return false;
         }
 
-        if self.unorder_recv_packet.len() != new.unorder_recv_packet.len() {
-            return false;
-        }
-
-        for i in 0..self.unorder_recv_packet.len() {
-            if self.unorder_recv_packet[i] != new.unorder_recv_packet[i] {
-                return false;
-            }
-        }
-
-        if self.unorder_recv_ack.len() != new.unorder_recv_ack.len() {
-            return false;
-        }
-
-        for j in 0..self.unorder_recv_ack.len() {
-            if self.unorder_recv_ack[j] != new.unorder_recv_ack[j] {
-                return false;
-            }
-        }
         true
     }
 }
@@ -501,7 +450,7 @@ pub fn handle_channel_open_init_and_try<C: Client>(
 
     if channel_args.client_id != old_connection_args.client_id
         || channel_args.open
-        || channel_args.channel_id != channel.num
+        || channel_args.channel_id != channel.number
         || channel_args.port_id != channel.port_id.as_bytes()
     {
         return Err(VerifyError::WrongChannelArgs);
@@ -578,7 +527,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
         ordering: new.order,
         remote: ChannelCounterparty {
             port_id: new.port_id,
-            channel_id: new.num.to_string(),
+            channel_id: new.number.to_string(),
         },
         connection_hops: Vec::new(),
     };
@@ -714,7 +663,7 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongPacketStatus);
     }
 
-    if ibc_packet.packet.sequence != old_channel.sequence.next_send_packet {
+    if ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends {
         return Err(VerifyError::WrongPacketSequence);
     }
 
@@ -735,6 +684,14 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannel);
     }
 
+    if new_channel.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+
+    if ibc_packet.status != PacketStatus::Recv {
+        return Err(VerifyError::WrongPacketStatus);
+    }
+
     if old_channel_args != new_channel_args {
         return Err(VerifyError::WrongChannelArgs);
     }
@@ -746,23 +703,20 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongPacketArgs);
     }
 
+    let unorder_sequence = if old_channel.order == Ordering::Unordered {
+        Some(ibc_packet.packet.sequence)
+    } else {
+        None
+    };
     if !old_channel
         .sequence
-        .next_recv_packet_is(&new_channel.sequence)
+        .next_recv_packet_is(&new_channel.sequence, unorder_sequence)
     {
-        return Err(VerifyError::WrongChannel);
+        return Err(VerifyError::WrongChannelSequence);
     }
 
-    if new_channel.state != State::Open {
-        return Err(VerifyError::WrongChannelState);
-    }
-
-    if ibc_packet.packet.sequence != new_channel.sequence.next_recv_packet {
+    if ibc_packet.packet.sequence != new_channel.sequence.next_sequence_recvs {
         return Err(VerifyError::WrongPacketSequence);
-    }
-
-    if ibc_packet.status != PacketStatus::Recv {
-        return Err(VerifyError::WrongPacketStatus);
     }
 
     client.verify_object(ibc_packet.packet, msg.proofs.object_proof)
@@ -780,6 +734,14 @@ pub fn handle_msg_ack_packet<C: Client>(
     new_packet_args: PacketArgs,
     msg: MsgAckPacket,
 ) -> Result<(), VerifyError> {
+    if !old_channel.equal_unless_sequence(&new_channel) {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    if old_ibc_packet.status != PacketStatus::Send && new_ibc_packet.status != PacketStatus::Ack {
+        return Err(VerifyError::WrongPacketStatus);
+    }
+
     if old_channel_args != new_channel_args {
         return Err(VerifyError::WrongChannelArgs);
     }
@@ -788,27 +750,16 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongPacketArgs);
     }
 
-    if !old_channel.equal_unless_sequence(&new_channel) {
-        return Err(VerifyError::WrongChannel);
-    }
-    if !old_channel.sequence.next_recv_ack_is(&new_channel.sequence) {
-        return Err(VerifyError::WrongChannel);
-    }
-
-    if new_channel.state != State::Open {
-        return Err(VerifyError::WrongChannelState);
+    let is_unorder = old_channel.order == Ordering::Unordered;
+    if !old_channel
+        .sequence
+        .next_recv_ack_is(&new_channel.sequence, is_unorder)
+    {
+        return Err(VerifyError::WrongChannelSequence);
     }
 
-    if new_channel.state != State::Open {
-        return Err(VerifyError::WrongChannelState);
-    }
-
-    if new_ibc_packet.packet.sequence != new_channel.sequence.next_recv_ack {
+    if new_ibc_packet.packet.sequence != new_channel.sequence.next_sequence_acks {
         return Err(VerifyError::WrongPacketSequence);
-    }
-
-    if old_ibc_packet.status != PacketStatus::Send && new_ibc_packet.status != PacketStatus::Ack {
-        return Err(VerifyError::WrongPacketStatus);
     }
 
     if old_ibc_packet.packet != new_ibc_packet.packet {
@@ -1113,19 +1064,13 @@ mod tests {
     fn test_handle_msg_channel_open_ack_failed() {
         let client = TestClient::default();
         let old_channel = IbcChannel {
-            num: 0,
+            number: 0,
             port_id: String::from(
                 "b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450",
             ),
             state: State::Init,
             order: Ordering::Unordered,
-            sequence: Sequence {
-                next_send_packet: 0,
-                next_recv_packet: 0,
-                next_recv_ack: 0,
-                unorder_recv_packet: vec![],
-                unorder_recv_ack: vec![],
-            },
+            sequence: Sequence::default(),
             counterparty: ChannelCounterparty {
                 port_id: String::from(
                     "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
@@ -1135,19 +1080,13 @@ mod tests {
             connection_hops: vec![index_to_connection_id(0)],
         };
         let new_channel = IbcChannel {
-            num: 0,
+            number: 0,
             port_id: String::from(
                 "b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450",
             ),
             state: State::Open,
             order: Ordering::Unordered,
-            sequence: Sequence {
-                next_send_packet: 0,
-                next_recv_packet: 0,
-                next_recv_ack: 0,
-                unorder_recv_packet: vec![],
-                unorder_recv_ack: vec![],
-            },
+            sequence: Sequence::default(),
             counterparty: ChannelCounterparty {
                 port_id: String::from(
                     "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
@@ -1245,7 +1184,7 @@ mod tests {
         let client = TestClient::default();
 
         let mut seq2 = Sequence::default();
-        seq2.next_send_packet += 1;
+        seq2.next_sequence_sends += 1;
 
         let mut old_channel = IbcChannel::default();
         old_channel.state = State::Open;
@@ -1284,7 +1223,7 @@ mod tests {
     fn test_msg_recv_packet_success() {
         let seq1 = Sequence::default();
         let mut seq2 = Sequence::default();
-        seq2.next_recv_packet += 1;
+        seq2.next_sequence_recvs += 1;
 
         let mut old_channel = IbcChannel::default();
         old_channel.sequence = seq1;

@@ -43,6 +43,7 @@ pub enum VerifyError {
     WrongChannelState,
     WrongChannel,
     WrongChannelArgs,
+    WrongChannelSequence,
 
     WrongPacketSequence,
     WrongPacketStatus,
