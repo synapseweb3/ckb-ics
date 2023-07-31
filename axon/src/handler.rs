@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use crate::consts::CHANNEL_ID_PREFIX;
+use crate::consts::COMMITMENT_PREFIX;
 use crate::convert_connection_id_to_index;
 use crate::convert_string_to_client_id;
 use crate::message::Envelope;
@@ -85,26 +86,24 @@ impl Default for IbcChannel {
 
 impl IbcChannel {
     pub fn equal_unless_state_and_counterparty(&self, other: &Self) -> bool {
-        if self.num != other.num
-            || self.port_id != other.port_id
-            || self.order != other.order
-            || self.sequence != other.sequence
-        {
-            return false;
-        }
-        true
+        (self.num, &self.port_id, self.order, &self.sequence)
+            == (other.num, &other.port_id, other.order, &other.sequence)
     }
 
     pub fn equal_unless_sequence(&self, other: &Self) -> bool {
-        if self.num != other.num
-            || self.port_id != other.port_id
-            || self.order != other.order
-            || self.state != other.state
-            || self.counterparty != other.counterparty
-        {
-            return false;
-        }
-        true
+        (
+            self.num,
+            &self.port_id,
+            self.order,
+            self.state,
+            &self.counterparty,
+        ) == (
+            other.num,
+            &other.port_id,
+            other.order,
+            other.state,
+            &other.counterparty,
+        )
     }
 }
 
@@ -355,8 +354,10 @@ pub fn handle_msg_connection_open_try<C: Client>(
         counterparty: ConnectionCounterparty {
             client_id: String::from_utf8_lossy(client.client_id()).to_string(),
             connection_id: None,
+            commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
         delay_period: connection.delay_period,
+        versions: vec![Default::default()],
     };
 
     let object_proof = msg.proof.object_proof;
@@ -395,7 +396,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
     let new_connection = &new.connections[conn_idx];
 
     if old_connection.client_id != new_connection.client_id
-        || old_connection.delay_period != old_connection.delay_period
+        || old_connection.delay_period != new_connection.delay_period
         || old_connection.counterparty.client_id != new_connection.counterparty.client_id
     {
         return Err(VerifyError::WrongClient);
@@ -415,8 +416,10 @@ pub fn handle_msg_connection_open_ack<C: Client>(
         counterparty: ConnectionCounterparty {
             client_id: String::from_utf8_lossy(client.client_id()).to_string(),
             connection_id: Some(conn_idx.to_string()),
+            commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
         delay_period: new_connection.delay_period,
+        versions: vec![Default::default()],
     };
     client.verify_object(expected, msg.proof_conn_end_on_b.object_proof)
 }
@@ -452,7 +455,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     let new_connection = &new.connections[conn_idx];
 
     if old_connection.client_id != new_connection.client_id
-        || old_connection.delay_period != old_connection.delay_period
+        || old_connection.delay_period != new_connection.delay_period
         || old_connection.counterparty != new_connection.counterparty
     {
         return Err(VerifyError::WrongClient);
@@ -466,8 +469,10 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
         counterparty: ConnectionCounterparty {
             client_id: String::from_utf8_lossy(client.client_id()).to_string(),
             connection_id: Some(conn_idx.to_string()),
+            commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
         delay_period: new_connection.delay_period,
+        versions: vec![Default::default()],
     };
 
     client.verify_object(expected, msg.proofs.object_proof)
@@ -858,9 +863,13 @@ pub fn get_channel_id_str(idx: u16) -> String {
 #[cfg(test)]
 mod tests {
 
-    use crate::{convert_client_id_to_string, index_to_connection_id, object::Proofs};
+    use crate::{consts, convert_client_id_to_string, object::Proofs};
 
     use super::*;
+
+    fn index_to_connection_id(index: usize) -> String {
+        format!("{}{index}", consts::CONNECTION_ID_PREFIX)
+    }
 
     #[derive(Debug, Default)]
     pub struct TestClient {
@@ -890,8 +899,7 @@ mod tests {
         new_connections.connections.push(ConnectionEnd {
             state: State::Init,
             client_id: convert_client_id_to_string([0u8; 32]),
-            counterparty: Default::default(),
-            delay_period: Default::default(),
+            ..Default::default()
         });
         new_connections.next_connection_number += 1;
 
@@ -922,8 +930,9 @@ mod tests {
             counterparty: ConnectionCounterparty {
                 client_id: String::from("dummy"),
                 connection_id: Some(String::from("dummy")),
+                commitment_prefix: COMMITMENT_PREFIX.to_vec(),
             },
-            delay_period: Default::default(),
+            ..Default::default()
         });
         new_connections.next_connection_number += 1;
 

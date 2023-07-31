@@ -1,6 +1,9 @@
+use crate::consts::COMMITMENT_PREFIX;
 use crate::convert_client_id_to_string;
 use crate::handler::get_channel_id_str;
 use crate::proof::ObjectProof;
+use crate::Bytes;
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -26,6 +29,7 @@ pub enum VerifyError {
     SerdeError,
 
     WrongClient,
+    WrongConnectionId,
 
     ConnectionsWrong,
 
@@ -110,11 +114,21 @@ impl Decodable for Ordering {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct ConnectionCounterparty {
     pub client_id: String,
     pub connection_id: Option<String>,
-    // pub commitment_prefix: Bytes,
+    pub commitment_prefix: Bytes,
+}
+
+impl Default for ConnectionCounterparty {
+    fn default() -> Self {
+        Self {
+            client_id: Default::default(),
+            connection_id: Default::default(),
+            commitment_prefix: COMMITMENT_PREFIX.to_vec(),
+        }
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, RlpEncodable, RlpDecodable)]
@@ -138,9 +152,8 @@ pub struct Packet {
     pub destination_port_id: String,
     pub destination_channel_id: String,
     pub data: Vec<u8>,
-    // todo
-    // pub timeout_height: Bytes, // bytes32
-    // pub timeout_timestamp: u64,
+    pub timeout_height: u64,
+    pub timeout_timestamp: u64,
 }
 
 impl Default for Packet {
@@ -152,6 +165,8 @@ impl Default for Packet {
             destination_port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
             destination_channel_id: get_channel_id_str(0),
             data: Default::default(),
+            timeout_height: 0,
+            timeout_timestamp: 0,
         }
     }
 }
@@ -167,12 +182,27 @@ impl Object for Packet {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, RlpEncodable, RlpDecodable)]
+pub struct Version {
+    pub identifier: String,
+    pub features: Vec<String>,
+}
+
+impl Default for Version {
+    fn default() -> Self {
+        Version {
+            identifier: "1".to_string(),
+            features: vec!["ORDER_ORDERED".to_owned(), "ORDER_UNORDERED".to_owned()],
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, RlpEncodable, RlpDecodable)]
 pub struct ConnectionEnd {
     pub state: State,
     pub client_id: String,
     pub counterparty: ConnectionCounterparty,
     pub delay_period: u64,
-    // pub versions: Vec<String>,
+    pub versions: Vec<Version>,
 }
 
 impl Default for ConnectionEnd {
@@ -182,6 +212,7 @@ impl Default for ConnectionEnd {
             client_id: convert_client_id_to_string([0u8; 32]),
             counterparty: Default::default(),
             delay_period: Default::default(),
+            versions: Default::default(),
         }
     }
 }

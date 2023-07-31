@@ -107,48 +107,42 @@ impl ChannelArgs {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct PacketArgs {
     pub channel_id: u16,
+    // mark as owner_lockhash
     pub port_id: [u8; 32],
     pub sequence: u16,
-    // Who pay for this capacity, the secp256k1 args
-    pub owner: [u8; 32],
 }
 
 impl PacketArgs {
-    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
-        if slice.len() != 68 {
-            return Err(());
+    pub fn from_slice(slice: &[u8]) -> Result<Self, VerifyError> {
+        if slice.len() != 36 {
+            return Err(VerifyError::WrongPacketArgs);
         }
         let channel_id = u16::from_le_bytes(slice[0..2].try_into().unwrap());
         let port_id = slice[2..34].try_into().unwrap();
         let sequence = u16::from_le_bytes(slice[34..36].try_into().unwrap());
-        let owner: [u8; 32] = slice[36..68].try_into().unwrap();
         Ok(PacketArgs {
             channel_id,
             port_id,
             sequence,
-            owner,
         })
     }
 
-    pub fn get_search_args(self) -> Vec<u8> {
+    pub fn get_search_args(self, search_all: bool) -> Vec<u8> {
         let mut result = Vec::new();
         result.extend(self.channel_id.to_le_bytes());
         result.extend(self.port_id);
-        result.extend(self.sequence.to_le_bytes());
+        if !search_all {
+            result.extend(self.sequence.to_le_bytes());
+        }
         result
     }
 
     pub fn get_owner(&self) -> [u8; 32] {
-        self.owner
+        self.port_id
     }
 
     pub fn to_args(self) -> Vec<u8> {
-        let mut result = Vec::new();
-        result.extend(self.channel_id.to_le_bytes());
-        result.extend(self.port_id);
-        result.extend(self.sequence.to_le_bytes());
-        result.extend(self.owner);
-        result
+        self.get_search_args(false)
     }
 }
 
@@ -218,17 +212,14 @@ pub fn convert_string_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
         .into())
 }
 
+// ConnectionId example: xxxxxx-connection-0, `xxxxxx` is the prefix of hex encoded ClientId
 pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, VerifyError> {
     let index_str = connection_id
         .split('-')
         .last()
-        .ok_or(VerifyError::ConnectionsWrong)?;
-    let index = usize::from_str(index_str).map_err(|_| VerifyError::ConnectionsWrong)?;
+        .ok_or(VerifyError::WrongConnectionId)?;
+    let index = usize::from_str(index_str).map_err(|_| VerifyError::WrongConnectionId)?;
     Ok(index)
-}
-
-pub fn index_to_connection_id(index: usize) -> String {
-    format!("{}{index}", consts::CONNECTION_ID_PREFIX)
 }
 
 #[cfg(test)]
