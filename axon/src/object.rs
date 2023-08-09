@@ -1,5 +1,5 @@
 use crate::consts::COMMITMENT_PREFIX;
-use crate::convert_client_id_to_string;
+use crate::convert_byte32_to_string;
 use crate::handler::get_channel_id_str;
 use crate::proof::ObjectProof;
 use crate::Bytes;
@@ -30,6 +30,8 @@ pub enum VerifyError {
 
     WrongClient,
     WrongConnectionId,
+    WrongPortId,
+    WrongCommonHexId,
 
     ConnectionsWrong,
 
@@ -161,9 +163,9 @@ impl Default for Packet {
     fn default() -> Self {
         Self {
             sequence: Default::default(),
-            source_port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            source_port_id: convert_byte32_to_string(&[0u8; 32]),
             source_channel_id: get_channel_id_str(0),
-            destination_port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            destination_port_id: convert_byte32_to_string(&[0u8; 32]),
             destination_channel_id: get_channel_id_str(0),
             data: Default::default(),
             timeout_height: 0,
@@ -210,7 +212,7 @@ impl Default for ConnectionEnd {
     fn default() -> Self {
         Self {
             state: Default::default(),
-            client_id: convert_client_id_to_string([0u8; 32]),
+            client_id: convert_byte32_to_string(&[0u8; 32]),
             counterparty: Default::default(),
             delay_period: Default::default(),
             versions: Default::default(),

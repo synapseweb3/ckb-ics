@@ -13,7 +13,10 @@ use crate::object::{
     State, VerifyError,
 };
 use crate::proof::ObjectProof;
-use crate::{convert_connection_id_to_index, convert_string_to_client_id};
+use crate::{
+    convert_byte32_to_string, convert_connection_id_to_index, convert_string_to_client_id,
+    convert_string_to_port_id,
+};
 use crate::{ChannelArgs, ConnectionArgs, PacketArgs};
 
 // use axon_protocol::types::Bytes;
@@ -40,7 +43,6 @@ pub struct IbcConnections {
 #[derive(Debug, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcChannel {
     pub number: u16,
-    // TODO: can this be removed?
     pub port_id: String,
     pub state: State,
     pub order: Ordering,
@@ -56,7 +58,7 @@ impl Default for IbcChannel {
     fn default() -> Self {
         Self {
             number: Default::default(),
-            port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            port_id: convert_byte32_to_string(&[0u8; 32]),
             state: Default::default(),
             order: Default::default(),
             sequence: Default::default(),
@@ -211,7 +213,7 @@ impl Sequence {
 }
 
 pub trait Client {
-    fn client_id(&self) -> &[u8];
+    fn client_id(&self) -> &[u8; 32];
 
     fn verify_object<O: Object>(&mut self, obj: O, proof: ObjectProof) -> Result<(), VerifyError>;
 }
@@ -245,7 +247,7 @@ pub fn handle_msg_connection_open_init<C: Client>(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if convert_string_to_client_id(&connection.client_id)? != client.client_id() {
+    if &convert_string_to_client_id(&connection.client_id)? != client.client_id() {
         return Err(VerifyError::WrongClient);
     }
 
@@ -285,7 +287,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if convert_string_to_client_id(&connection.client_id)? != client.client_id() {
+    if &convert_string_to_client_id(&connection.client_id)? != client.client_id() {
         return Err(VerifyError::WrongClient);
     }
 
@@ -301,7 +303,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
         state: State::Init,
         client_id: connection.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: String::from_utf8_lossy(client.client_id()).to_string(),
+            client_id: convert_byte32_to_string(client.client_id()),
             connection_id: None,
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
@@ -363,7 +365,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: String::from_utf8_lossy(client.client_id()).to_string(),
+            client_id: convert_byte32_to_string(client.client_id()),
             connection_id: Some(conn_idx.to_string()),
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
@@ -416,7 +418,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: String::from_utf8_lossy(client.client_id()).to_string(),
+            client_id: convert_byte32_to_string(client.client_id()),
             connection_id: Some(conn_idx.to_string()),
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
@@ -483,7 +485,7 @@ pub fn handle_msg_channel_open_init<C: Client>(
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
-    if convert_string_to_client_id(&conn.client_id)? != client.client_id() {
+    if &convert_string_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 
@@ -510,7 +512,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
-    if convert_string_to_client_id(&conn.client_id)? != client.client_id() {
+    if &convert_string_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 
@@ -641,7 +643,7 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if packet_args.port_id != ibc_packet.packet.source_port_id.as_bytes()
+    if packet_args.port_id != convert_string_to_port_id(&ibc_packet.packet.source_port_id)?
         || packet_args.sequence != ibc_packet.packet.sequence
         || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
     {
@@ -696,7 +698,7 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if packet_args.port_id != ibc_packet.packet.source_port_id.as_bytes()
+    if packet_args.port_id != convert_string_to_port_id(&ibc_packet.packet.source_port_id)?
         || packet_args.sequence != ibc_packet.packet.sequence
         || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
     {
@@ -814,7 +816,7 @@ pub fn get_channel_id_str(idx: u16) -> String {
 #[cfg(test)]
 mod tests {
 
-    use crate::{consts, convert_client_id_to_string, object::Proofs};
+    use crate::{consts, convert_byte32_to_string, object::Proofs};
 
     use super::*;
 
@@ -836,8 +838,8 @@ mod tests {
             Ok(())
         }
 
-        fn client_id(&self) -> &[u8] {
-            self.client.as_slice()
+        fn client_id(&self) -> &[u8; 32] {
+            &self.client
         }
     }
 
@@ -849,7 +851,7 @@ mod tests {
         let mut new_connections = IbcConnections::default();
         new_connections.connections.push(ConnectionEnd {
             state: State::Init,
-            client_id: convert_client_id_to_string([0u8; 32]),
+            client_id: convert_byte32_to_string(&[0u8; 32]),
             ..Default::default()
         });
         new_connections.next_connection_number += 1;
@@ -877,7 +879,7 @@ mod tests {
         let mut new_connections = IbcConnections::default();
         new_connections.connections.push(ConnectionEnd {
             state: State::OpenTry,
-            client_id: convert_client_id_to_string([0u8; 32]),
+            client_id: convert_byte32_to_string(&[0u8; 32]),
             counterparty: ConnectionCounterparty {
                 client_id: String::from("dummy"),
                 connection_id: Some(String::from("dummy")),
