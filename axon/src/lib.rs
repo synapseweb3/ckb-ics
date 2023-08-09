@@ -6,7 +6,7 @@ extern crate alloc;
 
 use core::str::FromStr;
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 pub use alloc::vec::Vec;
 
 pub mod consts;
@@ -16,6 +16,7 @@ pub mod object;
 pub mod proof;
 pub mod verify_mpt;
 
+use consts::CHANNEL_ID_PREFIX;
 use ethereum_types::H256;
 use object::{Object, VerifyError};
 use proof::TransactionReceipt;
@@ -225,6 +226,12 @@ pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, Veri
         .ok_or(VerifyError::WrongConnectionId)?;
     let index = usize::from_str(index_str).map_err(|_| VerifyError::WrongConnectionId)?;
     Ok(index)
+}
+
+pub fn get_channel_id_str(idx: u16) -> String {
+    let mut result = String::from(CHANNEL_ID_PREFIX);
+    result.push_str(&idx.to_string());
+    result
 }
 
 #[cfg(test)]

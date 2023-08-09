@@ -1,6 +1,6 @@
 use crate::consts::COMMITMENT_PREFIX;
 use crate::convert_byte32_to_string;
-use crate::handler::get_channel_id_str;
+use crate::get_channel_id_str;
 use crate::proof::ObjectProof;
 use crate::Bytes;
 use alloc::borrow::ToOwned;
@@ -47,6 +47,7 @@ pub enum VerifyError {
     WrongChannelArgs,
     WrongChannelSequence,
 
+    WrongUnusedPacket,
     WrongPacketSequence,
     WrongPacketStatus,
     WrongPacketContent,
@@ -181,6 +182,28 @@ impl Object for Packet {
 
     fn decode(data: &[u8]) -> Result<Self, VerifyError> {
         rlp::decode(data).map_err(|_| VerifyError::SerdeError)
+    }
+}
+
+impl Packet {
+    pub fn equal_unless_sequence(&self, other: &Self) -> bool {
+        (
+            &self.source_port_id,
+            &self.source_channel_id,
+            &self.destination_port_id,
+            &self.destination_channel_id,
+            &self.data,
+            self.timeout_height,
+            self.timeout_timestamp,
+        ) == (
+            &other.source_port_id,
+            &other.source_channel_id,
+            &other.destination_port_id,
+            &other.destination_channel_id,
+            &other.data,
+            other.timeout_height,
+            other.timeout_timestamp,
+        )
     }
 }
 
