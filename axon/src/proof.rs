@@ -5,7 +5,7 @@ use ethereum_types::{Address, Bloom, H256, U256, U64};
 use rlp::{Decodable, Encodable, RlpStream};
 use rlp_derive::{RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWrapper};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ObjectProof {
     pub receipt: TransactionReceipt,
     pub receipt_proof: Vec<Vec<u8>>,
@@ -41,18 +41,6 @@ impl Decodable for ObjectProof {
             state_root,
             axon_proof,
         })
-    }
-}
-
-impl Default for ObjectProof {
-    fn default() -> Self {
-        Self {
-            receipt: Default::default(),
-            receipt_proof: Default::default(),
-            block: Vec::new(),
-            state_root: Default::default(),
-            axon_proof: Vec::new(),
-        }
     }
 }
 
@@ -191,7 +179,7 @@ pub fn encode_receipt(receipt: &TransactionReceipt) -> Vec<u8> {
     }
 }
 
-fn normalize_v(v: u64, chain_id: U64) -> u64 {
+pub fn normalize_v(v: u64, chain_id: U64) -> u64 {
     if v > 1 {
         v - chain_id.as_u64() * 2 - 35
     } else {

@@ -48,7 +48,7 @@ pub enum MsgType {
 
 impl Encodable for MsgType {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        let t = self.clone() as u8;
+        let t = *self as u8;
         s.append(&t);
     }
 }
