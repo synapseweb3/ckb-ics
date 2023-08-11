@@ -22,7 +22,7 @@ mod objects;
 #[cfg(test)]
 mod test;
 
-use objects::*;
+pub use objects::*;
 
 pub fn handle_msg_connection_open_init<C: Client>(
     client: C,
