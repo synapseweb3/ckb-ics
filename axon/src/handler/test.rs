@@ -32,14 +32,18 @@ impl Client for TestClient {
 fn test_handle_msg_connection_open_init() {
     let client = TestClient::default();
 
-    let old_connections = IbcConnections::default();
-    let mut new_connections = IbcConnections::default();
-    new_connections.connections.push(ConnectionEnd {
+    let new_connection_end = ConnectionEnd {
         state: State::Init,
-        client_id: convert_byte32_to_string(&[0u8; 32]),
+        client_id: convert_byte32_to_hex(&[0u8; 32]),
         ..Default::default()
-    });
-    new_connections.next_connection_number += 1;
+    };
+
+    let old_connections = IbcConnections::default();
+    let new_connections = IbcConnections {
+        next_connection_number: 1,
+        connections: vec![new_connection_end],
+        ..Default::default()
+    };
 
     let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
     let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
@@ -60,19 +64,23 @@ fn test_handle_msg_connection_open_init() {
 fn test_handle_msg_connection_open_try() {
     let client = TestClient::default();
 
-    let old_connections = IbcConnections::default();
-    let mut new_connections = IbcConnections::default();
-    new_connections.connections.push(ConnectionEnd {
+    let new_connection_end = ConnectionEnd {
         state: State::OpenTry,
-        client_id: convert_byte32_to_string(&[0u8; 32]),
+        client_id: convert_byte32_to_hex(&[0u8; 32]),
         counterparty: ConnectionCounterparty {
             client_id: String::from("dummy"),
             connection_id: Some(String::from("dummy")),
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
         ..Default::default()
-    });
-    new_connections.next_connection_number += 1;
+    };
+
+    let old_connections = IbcConnections::default();
+    let new_connections = IbcConnections {
+        next_connection_number: 1,
+        connections: vec![new_connection_end],
+        ..Default::default()
+    };
 
     let msg = MsgConnectionOpenTry {
         proof: Default::default(),
@@ -100,32 +108,37 @@ fn test_handle_msg_connection_open_ack() {
         proof_conn_end_on_b: Default::default(),
     };
 
-    let dummy_connection_end = ConnectionEnd::default();
+    let old_connection_end = ConnectionEnd {
+        state: State::Init,
+        ..Default::default()
+    };
 
-    let mut old_connection_end = ConnectionEnd::default();
-    old_connection_end.state = State::Init;
+    let new_connection_end = ConnectionEnd {
+        state: State::Open,
+        counterparty: ConnectionCounterparty {
+            connection_id: Some("connection".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
 
-    let mut new_connection_end = ConnectionEnd::default();
-    new_connection_end.state = State::Open;
-    new_connection_end.counterparty.connection_id = Some("connection".to_string());
+    let old_connections = IbcConnections {
+        connections: vec![
+            ConnectionEnd::default(),
+            old_connection_end,
+            ConnectionEnd::default(),
+        ],
+        ..Default::default()
+    };
 
-    let mut old_connections = IbcConnections::default();
-    old_connections
-        .connections
-        .push(dummy_connection_end.clone());
-    old_connections.connections.push(old_connection_end);
-    old_connections
-        .connections
-        .push(dummy_connection_end.clone());
-
-    let mut new_connections = IbcConnections::default();
-    new_connections
-        .connections
-        .push(dummy_connection_end.clone());
-    new_connections.connections.push(new_connection_end);
-    new_connections
-        .connections
-        .push(dummy_connection_end.clone());
+    let new_connections = IbcConnections {
+        connections: vec![
+            ConnectionEnd::default(),
+            new_connection_end,
+            ConnectionEnd::default(),
+        ],
+        ..Default::default()
+    };
 
     let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
     let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
@@ -149,31 +162,34 @@ fn test_handle_msg_connection_open_confirm() {
         proofs: Default::default(),
     };
 
-    let dummy_connection_end = ConnectionEnd::default();
+    let old_connection_end = ConnectionEnd {
+        state: State::OpenTry,
+        ..Default::default()
+    };
 
-    let mut old_connection_end = ConnectionEnd::default();
-    old_connection_end.state = State::OpenTry;
+    let new_connection_end = ConnectionEnd {
+        state: State::Open,
+        ..Default::default()
+    };
 
-    let mut new_connection_end = ConnectionEnd::default();
-    new_connection_end.state = State::Open;
+    let old_connections = IbcConnections {
+        connections: vec![
+            ConnectionEnd::default(),
+            old_connection_end,
+            ConnectionEnd::default(),
+        ],
+        ..Default::default()
+    };
 
-    let mut old_connections = IbcConnections::default();
-    old_connections
-        .connections
-        .push(dummy_connection_end.clone());
-    old_connections.connections.push(old_connection_end);
-    old_connections
-        .connections
-        .push(dummy_connection_end.clone());
+    let new_connections = IbcConnections {
+        connections: vec![
+            ConnectionEnd::default(),
+            new_connection_end,
+            ConnectionEnd::default(),
+        ],
+        ..Default::default()
+    };
 
-    let mut new_connections = IbcConnections::default();
-    new_connections
-        .connections
-        .push(dummy_connection_end.clone());
-    new_connections.connections.push(new_connection_end);
-    new_connections
-        .connections
-        .push(dummy_connection_end.clone());
     let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
     let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
 
@@ -192,16 +208,22 @@ fn test_handle_msg_connection_open_confirm() {
 fn test_handle_msg_channel_open_init() {
     let client = TestClient::default();
 
-    let mut new_connections = IbcConnections::default();
-    new_connections.next_channel_number += 1;
+    let connection_end = ConnectionEnd {
+        state: State::Open,
+        ..Default::default()
+    };
 
-    let mut connection_end = ConnectionEnd::default();
-    connection_end.state = State::Open;
-    new_connections.connections.push(connection_end);
+    let new_connections = IbcConnections {
+        next_channel_number: 1,
+        connections: vec![connection_end],
+        ..Default::default()
+    };
 
-    let mut channel = IbcChannel::default();
-    channel.state = State::Init;
-    channel.connection_hops.push(index_to_connection_id(0));
+    let channel = IbcChannel {
+        state: State::Init,
+        connection_hops: vec![index_to_connection_id(0)],
+        ..Default::default()
+    };
 
     let msg = MsgChannelOpenInit {};
     handle_msg_channel_open_init(client, &new_connections, channel, msg).unwrap();
@@ -211,34 +233,51 @@ fn test_handle_msg_channel_open_init() {
 fn test_handle_msg_channel_open_try_success() {
     let client = TestClient::default();
 
-    let mut new_connections = IbcConnections::default();
-    new_connections.next_channel_number += 1;
+    let connection_end = ConnectionEnd {
+        state: State::Open,
+        ..Default::default()
+    };
 
-    let mut connection_end = ConnectionEnd::default();
-    connection_end.state = State::Open;
-    new_connections.connections.push(connection_end);
+    let new_connections = IbcConnections {
+        next_channel_number: 1,
+        connections: vec![connection_end],
+        ..Default::default()
+    };
 
-    let mut channel = IbcChannel::default();
-    channel.connection_hops.push(index_to_connection_id(0));
-    channel.state = State::OpenTry;
+    let channel = IbcChannel {
+        state: State::OpenTry,
+        connection_hops: vec![index_to_connection_id(0)],
+        ..Default::default()
+    };
 
     let msg = MsgChannelOpenTry {
         proof_chan_end_on_a: Default::default(),
     };
+
     handle_msg_channel_open_try(client, &new_connections, channel, msg).unwrap()
 }
 
 #[test]
 fn test_handle_msg_channel_open_ack_success() {
     let client = TestClient::default();
-    let mut old_channel = IbcChannel::default();
-    old_channel.state = State::Init;
-    old_channel.counterparty.port_id = "portid".to_string();
 
-    let mut new_channel = IbcChannel::default();
-    new_channel.state = State::Open;
-    new_channel.counterparty.channel_id = "channel-id".to_string();
-    new_channel.counterparty.port_id = "portid".to_string();
+    let old_channel = IbcChannel {
+        state: State::Init,
+        counterparty: ChannelCounterparty {
+            port_id: "portid".to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let new_channel = IbcChannel {
+        state: State::Open,
+        counterparty: ChannelCounterparty {
+            channel_id: "channel-id".to_string(),
+            port_id: "portid".to_string(),
+        },
+        ..Default::default()
+    };
 
     let msg = MsgChannelOpenAck {
         proofs: Default::default(),
@@ -326,11 +365,16 @@ fn test_handle_msg_channel_open_ack_failed() {
 #[test]
 fn handle_msg_channel_open_confirm_success() {
     let client = TestClient::default();
-    let mut old_channel = IbcChannel::default();
-    old_channel.state = State::OpenTry;
 
-    let mut new_channel = IbcChannel::default();
-    new_channel.state = State::Open;
+    let old_channel = IbcChannel {
+        state: State::OpenTry,
+        ..Default::default()
+    };
+
+    let new_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
 
     let msg = MsgChannelOpenConfirm {
         proofs: Default::default(),
@@ -342,13 +386,17 @@ fn handle_msg_channel_open_confirm_success() {
 #[test]
 fn handle_msg_channel_open_confirm_channel_unmatch() {
     let client = TestClient::default();
-    let mut old_channel = IbcChannel::default();
-    old_channel.state = State::OpenTry;
 
-    let mut new_channel = IbcChannel::default();
-    new_channel.state = State::Open;
+    let old_channel = IbcChannel {
+        state: State::OpenTry,
+        ..Default::default()
+    };
 
-    new_channel.order = Ordering::Ordered;
+    let new_channel = IbcChannel {
+        state: State::Open,
+        order: Ordering::Ordered,
+        ..Default::default()
+    };
 
     let msg = MsgChannelOpenConfirm {
         proofs: Default::default(),
@@ -369,12 +417,15 @@ fn test_handle_msg_send_packet_success() {
     let mut seq2 = Sequence::default();
     seq2.next_sequence_sends += 1;
 
-    let mut old_channel = IbcChannel::default();
-    old_channel.state = State::Open;
-
-    let mut new_channel = IbcChannel::default();
-    new_channel.sequence = seq2;
-    new_channel.state = State::Open;
+    let old_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
+    let new_channel = IbcChannel {
+        sequence: seq2,
+        state: State::Open,
+        ..Default::default()
+    };
     let msg = MsgSendPacket {};
 
     let packet = Packet::default();
@@ -408,13 +459,17 @@ fn test_msg_recv_packet_success() {
     let mut seq2 = Sequence::default();
     seq2.next_sequence_recvs += 1;
 
-    let mut old_channel = IbcChannel::default();
-    old_channel.sequence = seq1;
-    old_channel.state = State::Open;
+    let old_channel = IbcChannel {
+        sequence: seq1,
+        state: State::Open,
+        ..Default::default()
+    };
 
-    let mut new_channel = IbcChannel::default();
-    new_channel.sequence = seq2;
-    new_channel.state = State::Open;
+    let new_channel = IbcChannel {
+        sequence: seq2,
+        state: State::Open,
+        ..Default::default()
+    };
 
     let ibc_packet = IbcPacket {
         packet: Packet::default(),

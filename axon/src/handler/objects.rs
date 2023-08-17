@@ -4,7 +4,7 @@ use rlp::{Decodable, Encodable};
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
-use crate::convert_byte32_to_string;
+use crate::convert_byte32_to_hex;
 use crate::object::{
     ChannelCounterparty, ConnectionEnd, Object, Ordering, Packet, State, VerifyError,
 };
@@ -36,7 +36,7 @@ impl Default for IbcChannel {
     fn default() -> Self {
         Self {
             number: Default::default(),
-            port_id: convert_byte32_to_string(&[0u8; 32]),
+            port_id: convert_byte32_to_hex(&[0u8; 32]),
             state: Default::default(),
             order: Default::default(),
             sequence: Default::default(),

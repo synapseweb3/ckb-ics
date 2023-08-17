@@ -13,8 +13,8 @@ use crate::object::{
     State, VerifyError,
 };
 use crate::{
-    convert_byte32_to_string, convert_connection_id_to_index, convert_string_to_client_id,
-    convert_string_to_port_id, get_channel_id_str,
+    convert_byte32_to_hex, convert_connection_id_to_index, convert_hex_to_client_id,
+    convert_hex_to_port_id, get_channel_id_str,
 };
 use crate::{ChannelArgs, ConnectionArgs, PacketArgs};
 
@@ -53,7 +53,7 @@ pub fn handle_msg_connection_open_init<C: Client>(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if &convert_string_to_client_id(&connection.client_id)? != client.client_id() {
+    if &convert_hex_to_client_id(&connection.client_id)? != client.client_id() {
         return Err(VerifyError::WrongClient);
     }
 
@@ -93,7 +93,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if &convert_string_to_client_id(&connection.client_id)? != client.client_id() {
+    if &convert_hex_to_client_id(&connection.client_id)? != client.client_id() {
         return Err(VerifyError::WrongClient);
     }
 
@@ -109,7 +109,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
         state: State::Init,
         client_id: connection.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: convert_byte32_to_string(client.client_id()),
+            client_id: convert_byte32_to_hex(client.client_id()),
             connection_id: None,
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
@@ -171,7 +171,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: convert_byte32_to_string(client.client_id()),
+            client_id: convert_byte32_to_hex(client.client_id()),
             connection_id: Some(conn_idx.to_string()),
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
@@ -224,7 +224,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
         state: State::Open,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: ConnectionCounterparty {
-            client_id: convert_byte32_to_string(client.client_id()),
+            client_id: convert_byte32_to_hex(client.client_id()),
             connection_id: Some(conn_idx.to_string()),
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
@@ -292,7 +292,7 @@ pub fn handle_msg_channel_open_init<C: Client>(
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
-    if &convert_string_to_client_id(&conn.client_id)? != client.client_id() {
+    if &convert_hex_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 
@@ -319,7 +319,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = &ibc_connections.connections[conn_id];
 
-    if &convert_string_to_client_id(&conn.client_id)? != client.client_id() {
+    if &convert_hex_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
     }
 
@@ -451,7 +451,7 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if packet_args.port_id != convert_string_to_port_id(&ibc_packet.packet.source_port_id)?
+    if packet_args.port_id != convert_hex_to_port_id(&ibc_packet.packet.source_port_id)?
         || packet_args.sequence != ibc_packet.packet.sequence
         || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
     {
@@ -516,7 +516,7 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if packet_args.port_id != convert_string_to_port_id(&ibc_packet.packet.source_port_id)?
+    if packet_args.port_id != convert_hex_to_port_id(&ibc_packet.packet.source_port_id)?
         || packet_args.sequence != ibc_packet.packet.sequence
         || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
     {

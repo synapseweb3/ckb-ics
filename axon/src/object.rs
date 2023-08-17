@@ -1,5 +1,5 @@
 use crate::consts::COMMITMENT_PREFIX;
-use crate::convert_byte32_to_string;
+use crate::convert_byte32_to_hex;
 use crate::get_channel_id_str;
 use crate::proof::ObjectProof;
 use crate::Bytes;
@@ -22,8 +22,9 @@ pub trait Object: Sized {
 }
 
 #[derive(Debug)]
+#[repr(i8)]
 pub enum VerifyError {
-    FoundNoMessage,
+    FoundNoMessage = 100,
     EventNotMatch,
     InvalidReceiptProof,
     SerdeError,
@@ -52,6 +53,12 @@ pub enum VerifyError {
     WrongPacketStatus,
     WrongPacketContent,
     WrongPacketArgs,
+}
+
+impl From<VerifyError> for i8 {
+    fn from(value: VerifyError) -> Self {
+        value as i8
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
@@ -164,9 +171,9 @@ impl Default for Packet {
     fn default() -> Self {
         Self {
             sequence: Default::default(),
-            source_port_id: convert_byte32_to_string(&[0u8; 32]),
+            source_port_id: convert_byte32_to_hex(&[0u8; 32]),
             source_channel_id: get_channel_id_str(0),
-            destination_port_id: convert_byte32_to_string(&[0u8; 32]),
+            destination_port_id: convert_byte32_to_hex(&[0u8; 32]),
             destination_channel_id: get_channel_id_str(0),
             data: Default::default(),
             timeout_height: 0,
@@ -235,7 +242,7 @@ impl Default for ConnectionEnd {
     fn default() -> Self {
         Self {
             state: Default::default(),
-            client_id: convert_byte32_to_string(&[0u8; 32]),
+            client_id: convert_byte32_to_hex(&[0u8; 32]),
             counterparty: Default::default(),
             delay_period: Default::default(),
             versions: Default::default(),

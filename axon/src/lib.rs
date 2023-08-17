@@ -6,7 +6,7 @@ extern crate alloc;
 
 use core::str::FromStr;
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 pub use alloc::vec::Vec;
 
 pub mod consts;
@@ -202,17 +202,17 @@ pub fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
     }
 }
 
-pub fn convert_byte32_to_string(bytes32: &[u8; 32]) -> String {
+pub fn convert_byte32_to_hex(bytes32: &[u8; 32]) -> String {
     format!("{:x}", H256::from(bytes32))
 }
 
-pub fn convert_string_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
+pub fn convert_hex_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
     Ok(H256::from_str(s)
         .map_err(|_| VerifyError::WrongClient)?
         .into())
 }
 
-pub fn convert_string_to_port_id(s: &str) -> Result<[u8; 32], VerifyError> {
+pub fn convert_hex_to_port_id(s: &str) -> Result<[u8; 32], VerifyError> {
     Ok(H256::from_str(s)
         .map_err(|_| VerifyError::WrongPortId)?
         .into())
@@ -229,16 +229,14 @@ pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, Veri
 }
 
 pub fn get_channel_id_str(idx: u16) -> String {
-    let mut result = String::from(CHANNEL_ID_PREFIX);
-    result.push_str(&idx.to_string());
-    result
+    format!("{CHANNEL_ID_PREFIX}{}", idx)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::ChannelArgs;
 
-    use super::{convert_byte32_to_string, convert_string_to_client_id};
+    use super::{convert_byte32_to_hex, convert_hex_to_client_id};
 
     #[test]
     fn client_id_to_string() {
@@ -246,8 +244,8 @@ mod tests {
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
             25, 26, 27, 28, 29, 30, 31, 32,
         ];
-        let s = convert_byte32_to_string(&actual);
-        let r = convert_string_to_client_id(&s).unwrap();
+        let s = convert_byte32_to_hex(&actual);
+        let r = convert_hex_to_client_id(&s).unwrap();
         assert_eq!(actual, r);
     }
 
