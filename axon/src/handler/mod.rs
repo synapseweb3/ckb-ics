@@ -480,7 +480,8 @@ pub fn handle_msg_recv_packet<C: Client>(
 ) -> Result<(), VerifyError> {
     if let Some(ibc_packed) = useless_ibc_packet {
         if ibc_packed.status != PacketStatus::WriteAck
-            || ibc_packed.packet.sequence + 1 >= old_channel.sequence.next_sequence_recvs
+            // TODO: use Axon proof to check this useless ibc_packet is INDEED useless
+            || ibc_packed.packet.sequence + 3 >= old_channel.sequence.next_sequence_recvs
         {
             return Err(VerifyError::WrongUnusedPacket);
         }
@@ -564,12 +565,14 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongPacketContent);
     }
 
+    if old_ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends {
+        return Err(VerifyError::WrongPacketSequence);
+    }
+
     let is_unorder = if old_channel.order == Ordering::Unordered {
         true
     } else {
-        if new_ibc_packet.packet.sequence != old_channel.sequence.next_sequence_acks
-            || old_ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends
-        {
+        if new_ibc_packet.packet.sequence != old_channel.sequence.next_sequence_acks {
             return Err(VerifyError::WrongPacketSequence);
         }
         false
