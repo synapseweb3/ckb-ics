@@ -38,11 +38,7 @@ pub fn handle_msg_connection_open_init<C: Client>(
         return Err(VerifyError::WrongConnectionCnt);
     }
 
-    if old_args != new_args {
-        return Err(VerifyError::WrongConnectionArgs);
-    }
-
-    if old_args.client_id.as_slice() != client.client_id() {
+    if old_args != new_args || old_args.client_id.as_slice() != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -78,11 +74,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
         return Err(VerifyError::WrongConnectionCnt);
     }
 
-    if old_args != new_args {
-        return Err(VerifyError::WrongConnectionArgs);
-    }
-
-    if old_args.client_id.as_slice() != client.client_id() {
+    if old_args != new_args || old_args.client_id.as_slice() != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -93,11 +85,9 @@ pub fn handle_msg_connection_open_try<C: Client>(
     }
 
     let connection = new_connections.connections.last().unwrap();
-    if &convert_hex_to_client_id(&connection.client_id)? != client.client_id() {
-        return Err(VerifyError::WrongClient);
-    }
-
-    if connection.counterparty.connection_id.is_none() {
+    if &convert_hex_to_client_id(&connection.client_id)? != client.client_id()
+        || connection.counterparty.connection_id.is_none()
+    {
         return Err(VerifyError::WrongClient);
     }
 
@@ -134,11 +124,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
         return Err(VerifyError::WrongConnectionCnt);
     }
 
-    if old_args != new_args {
-        return Err(VerifyError::WrongConnectionArgs);
-    }
-
-    if old_args.client_id.as_slice() != client.client_id() {
+    if old_args != new_args || &old_args.client_id != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -200,11 +186,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
         }
     }
 
-    if old_args != new_args {
-        return Err(VerifyError::WrongConnectionArgs);
-    }
-
-    if old_args.client_id.as_slice() != client.client_id() {
+    if old_args != new_args || &old_args.client_id != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -249,18 +231,16 @@ pub fn handle_channel_open_init_and_try<C: Client>(
     if old_connections.next_channel_number + 1 != new_connections.next_channel_number {
         return Err(VerifyError::WrongConnectionNextChannelNumber);
     }
-    if old_connection_args != new_connection_args {
-        return Err(VerifyError::WrongConnectionArgs);
-    }
-
-    if old_connection_args.client_id.as_slice() != client.client_id() {
+    if old_connection_args != new_connection_args
+        || &old_connection_args.client_id != client.client_id()
+    {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
     if channel_args.client_id != old_connection_args.client_id
         || channel_args.open
         || channel_args.channel_id != channel.number
-        || channel_args.port_id != channel.port_id.as_bytes()
+        || channel_args.port_id != convert_hex_to_port_id(&channel.port_id)?
     {
         return Err(VerifyError::WrongChannelArgs);
     }
@@ -290,7 +270,10 @@ pub fn handle_msg_channel_open_init<C: Client>(
         return Err(VerifyError::ConnectionsWrong);
     }
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
-    let conn = &ibc_connections.connections[conn_id];
+    let conn = ibc_connections
+        .connections
+        .get(conn_id)
+        .ok_or(VerifyError::WrongConnectionnNumber)?;
 
     if &convert_hex_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);
@@ -317,7 +300,10 @@ pub fn handle_msg_channel_open_try<C: Client>(
         return Err(VerifyError::ConnectionsWrong);
     }
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
-    let conn = &ibc_connections.connections[conn_id];
+    let conn = ibc_connections
+        .connections
+        .get(conn_id)
+        .ok_or(VerifyError::WrongConnectionnNumber)?;
 
     if &convert_hex_to_client_id(&conn.client_id)? != client.client_id() {
         return Err(VerifyError::WrongConnectionClient);

@@ -31,6 +31,7 @@ pub enum VerifyError {
 
     WrongClient,
     WrongConnectionId,
+    WrongConnectionnNumber,
     WrongPortId,
     WrongCommonHexId,
 
