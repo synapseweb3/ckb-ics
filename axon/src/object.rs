@@ -1,6 +1,6 @@
 use crate::consts::COMMITMENT_PREFIX;
-use crate::convert_client_id_to_string;
-use crate::handler::get_channel_id_str;
+use crate::convert_byte32_to_hex;
+use crate::get_channel_id_str;
 use crate::proof::ObjectProof;
 use crate::Bytes;
 use alloc::borrow::ToOwned;
@@ -22,14 +22,18 @@ pub trait Object: Sized {
 }
 
 #[derive(Debug)]
+#[repr(i8)]
 pub enum VerifyError {
-    FoundNoMessage,
+    FoundNoMessage = 100,
     EventNotMatch,
     InvalidReceiptProof,
     SerdeError,
 
     WrongClient,
     WrongConnectionId,
+    WrongConnectionnNumber,
+    WrongPortId,
+    WrongCommonHexId,
 
     ConnectionsWrong,
 
@@ -45,10 +49,17 @@ pub enum VerifyError {
     WrongChannelArgs,
     WrongChannelSequence,
 
+    WrongUnusedPacket,
     WrongPacketSequence,
     WrongPacketStatus,
     WrongPacketContent,
     WrongPacketArgs,
+}
+
+impl From<VerifyError> for i8 {
+    fn from(value: VerifyError) -> Self {
+        value as i8
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
@@ -161,9 +172,9 @@ impl Default for Packet {
     fn default() -> Self {
         Self {
             sequence: Default::default(),
-            source_port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            source_port_id: convert_byte32_to_hex(&[0u8; 32]),
             source_channel_id: get_channel_id_str(0),
-            destination_port_id: String::from_utf8_lossy([0u8; 32].as_slice()).to_string(),
+            destination_port_id: convert_byte32_to_hex(&[0u8; 32]),
             destination_channel_id: get_channel_id_str(0),
             data: Default::default(),
             timeout_height: 0,
@@ -179,6 +190,28 @@ impl Object for Packet {
 
     fn decode(data: &[u8]) -> Result<Self, VerifyError> {
         rlp::decode(data).map_err(|_| VerifyError::SerdeError)
+    }
+}
+
+impl Packet {
+    pub fn equal_unless_sequence(&self, other: &Self) -> bool {
+        (
+            &self.source_port_id,
+            &self.source_channel_id,
+            &self.destination_port_id,
+            &self.destination_channel_id,
+            &self.data,
+            self.timeout_height,
+            self.timeout_timestamp,
+        ) == (
+            &other.source_port_id,
+            &other.source_channel_id,
+            &other.destination_port_id,
+            &other.destination_channel_id,
+            &other.data,
+            other.timeout_height,
+            other.timeout_timestamp,
+        )
     }
 }
 
@@ -210,7 +243,7 @@ impl Default for ConnectionEnd {
     fn default() -> Self {
         Self {
             state: Default::default(),
-            client_id: convert_client_id_to_string([0u8; 32]),
+            client_id: convert_byte32_to_hex(&[0u8; 32]),
             counterparty: Default::default(),
             delay_period: Default::default(),
             versions: Default::default(),

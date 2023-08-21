@@ -16,6 +16,7 @@ pub mod object;
 pub mod proof;
 pub mod verify_mpt;
 
+use consts::CHANNEL_ID_PREFIX;
 use ethereum_types::H256;
 use object::{Object, VerifyError};
 use proof::TransactionReceipt;
@@ -107,8 +108,7 @@ impl ChannelArgs {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct PacketArgs {
     pub channel_id: u16,
-    // mark as owner_lockhash
-    pub port_id: [u8; 32],
+    pub port_id: [u8; 32], // mark as owner_lockhash
     pub sequence: u16,
 }
 
@@ -202,13 +202,19 @@ pub fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
     }
 }
 
-pub fn convert_client_id_to_string(client_id: [u8; 32]) -> String {
-    format!("{:x}", H256::from(client_id))
+pub fn convert_byte32_to_hex(bytes32: &[u8; 32]) -> String {
+    format!("{:x}", H256::from(bytes32))
 }
 
-pub fn convert_string_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
+pub fn convert_hex_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
     Ok(H256::from_str(s)
         .map_err(|_| VerifyError::WrongClient)?
+        .into())
+}
+
+pub fn convert_hex_to_port_id(s: &str) -> Result<[u8; 32], VerifyError> {
+    Ok(H256::from_str(s)
+        .map_err(|_| VerifyError::WrongPortId)?
         .into())
 }
 
@@ -222,11 +228,15 @@ pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, Veri
     Ok(index)
 }
 
+pub fn get_channel_id_str(idx: u16) -> String {
+    format!("{CHANNEL_ID_PREFIX}{}", idx)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::ChannelArgs;
 
-    use super::{convert_client_id_to_string, convert_string_to_client_id};
+    use super::{convert_byte32_to_hex, convert_hex_to_client_id};
 
     #[test]
     fn client_id_to_string() {
@@ -234,8 +244,8 @@ mod tests {
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
             25, 26, 27, 28, 29, 30, 31, 32,
         ];
-        let s = convert_client_id_to_string(actual);
-        let r = convert_string_to_client_id(&s).unwrap();
+        let s = convert_byte32_to_hex(&actual);
+        let r = convert_hex_to_client_id(&s).unwrap();
         assert_eq!(actual, r);
     }
 

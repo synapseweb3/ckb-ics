@@ -35,14 +35,9 @@ pub enum MsgType {
 
     MsgSendPacket,
     MsgRecvPacket,
+    MsgWriteAckPacket,
     MsgAckPacket,
-    // Business side sends this message after handling MsgRecvPacket
-    MsgAckOutboxPacket,
-    // Business side sends this message after handling MsgAckPacket
-    MsgAckInboxPacket,
-    // Relayer side sends this message after
-    // the packet is finsihed and they could get back their capacity
-    MsgFinishPacket,
+
     MsgTimeoutPacket,
 }
 
@@ -75,12 +70,10 @@ impl Decodable for MsgType {
 
             14 => Ok(MsgType::MsgSendPacket),
             15 => Ok(MsgType::MsgRecvPacket),
-            16 => Ok(MsgType::MsgAckPacket),
-            17 => Ok(MsgType::MsgAckOutboxPacket),
-            18 => Ok(MsgType::MsgAckInboxPacket),
+            16 => Ok(MsgType::MsgWriteAckPacket),
+            17 => Ok(MsgType::MsgAckPacket),
 
-            19 => Ok(MsgType::MsgFinishPacket),
-            20 => Ok(MsgType::MsgTimeoutPacket),
+            18 => Ok(MsgType::MsgTimeoutPacket),
             _ => Err(rlp::DecoderError::Custom("msg type decode error")),
         }
     }
@@ -157,7 +150,7 @@ pub struct MsgChannelOpenInit {
 #[derive(RlpEncodable, RlpDecodable)]
 pub struct MsgChannelOpenTry {
     // pub port_id_on_b: CString,
-    // CKB's channel doesn't have this field
+    /* CKB's channel doesn't have this field */
     // pub connection_hops_on_b: Vec<CString>,
     // pub port_id_on_a: CString,
     // pub chain_id_on_a: CString,
@@ -171,11 +164,11 @@ pub struct MsgChannelOpenTry {
 /// Per our convention, this message is sent to chain A.
 #[derive(RlpEncodable, RlpDecodable)]
 pub struct MsgChannelOpenAck {
-    // In CKB tx, these 2 fields are found in cell dep and witness.
+    /* In CKB tx, these 2 fields are found in cell dep and witness. */
     // pub port_id_on_a: CString,
     // pub chan_id_on_a: CString,
-    // pub chain_id_on_b: CString,
     pub proofs: Proofs,
+    // pub chain_id_on_b: CString,
     // pub connection_hops_on_b: Vec<String>,
 }
 
@@ -192,7 +185,7 @@ pub struct MsgChannelOpenConfirm {
 // Per our convention, this message is sent to chain A.
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgChannelCloseInit {
-    // In CKB tx, these 2 fields are found in witness.
+    /* In CKB tx, these 2 fields are found in witness. */
     // pub port_id_on_a: CString,
     // pub chan_id_on_a: CString,
 }
@@ -200,7 +193,7 @@ pub struct MsgChannelCloseInit {
 // Per our convention, this message is sent to chain B.
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgChannelCloseConfirm {
-    // In CKB tx, these 2 fields are found in witness.
+    /* In CKB tx, these 2 fields are found in witness. */
     // pub port_id_on_b: CString,
     // pub port_id_on_b: CString,
     pub proofs: Proofs,
@@ -223,22 +216,18 @@ pub struct MsgAckPacket {
     pub proofs: Proofs,
 }
 
+// Business side sends this message after handling MsgRecvPacket
+#[derive(RlpDecodable, RlpEncodable)]
+pub struct MsgWriteAckPacket {
+    // pub packet: Packet,
+    pub ack: Vec<u8>,
+}
+
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgTimeoutPacket {
     pub packet: Packet,
     pub next_sequence_recv: U256,
     pub proofs: Proofs,
-}
-
-// Business side sends this message after handling MsgAckPacket
-#[derive(RlpDecodable, RlpEncodable)]
-pub struct MsgAckInboxPacket {}
-
-// Business side sends this message after handling MsgRecvPacket
-#[derive(RlpDecodable, RlpEncodable)]
-pub struct MsgAckOutboxPacket {
-    pub ack: Vec<u8>,
-    // pub packet: Packet,
 }
 
 #[cfg(test)]
@@ -269,10 +258,8 @@ mod tests {
 
         types.push(MsgType::MsgSendPacket);
         types.push(MsgType::MsgRecvPacket);
+        types.push(MsgType::MsgWriteAckPacket);
         types.push(MsgType::MsgAckPacket);
-        types.push(MsgType::MsgAckOutboxPacket);
-        types.push(MsgType::MsgAckInboxPacket);
-        types.push(MsgType::MsgFinishPacket);
         types.push(MsgType::MsgTimeoutPacket);
 
         for i in 1..types.len() {
