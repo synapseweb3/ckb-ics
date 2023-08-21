@@ -1,6 +1,5 @@
 use alloc::{collections::BTreeSet, string::String, vec::Vec};
 use ethereum_types::H256;
-use rlp::{Decodable, Encodable};
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
@@ -76,33 +75,16 @@ pub struct IbcPacket {
     pub status: PacketStatus,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
-#[repr(u8)]
-pub enum PacketStatus {
-    Send = 1,
-    Recv,
-    WriteAck,
-    Ack,
-}
-
-impl Encodable for PacketStatus {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        let status = *self as u8;
-        s.append(&status);
-    }
-}
-
-impl Decodable for PacketStatus {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        let status: u8 = rlp.val_at(0)?;
-        match status {
-            1 => Ok(PacketStatus::Send),
-            2 => Ok(PacketStatus::Recv),
-            3 => Ok(PacketStatus::Ack),
-            4 => Ok(PacketStatus::WriteAck),
-            _ => Err(rlp::DecoderError::Custom("invalid packet status")),
-        }
-    }
+impl_enum_rlp! {
+    #[derive(PartialEq, Eq, Clone, Copy)]
+    #[repr(u8)]
+    pub enum PacketStatus {
+        Send = 1,
+        Recv,
+        WriteAck,
+        Ack,
+    },
+    u8
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, RlpEncodable, RlpDecodable)]

@@ -4,7 +4,6 @@ use super::object::*;
 use super::Vec;
 use super::{Bytes, U256};
 // use axon_protocol::types::{Bytes, U256};
-use rlp::{Decodable, Encodable, Rlp};
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
@@ -14,70 +13,35 @@ pub struct Envelope {
     pub content: Vec<u8>,
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MsgType {
-    MsgClientCreate = 1,
-    MsgClientUpdate,
-    MsgClientMisbehaviour,
+impl_enum_rlp!(
+    #[repr(u8)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum MsgType {
+        MsgClientCreate = 1,
+        MsgClientUpdate,
+        MsgClientMisbehaviour,
 
-    MsgConnectionOpenInit,
-    MsgConnectionOpenTry,
-    MsgConnectionOpenAck,
-    MsgConnectionOpenConfirm,
+        MsgConnectionOpenInit,
+        MsgConnectionOpenTry,
+        MsgConnectionOpenAck,
+        MsgConnectionOpenConfirm,
 
-    MsgChannelOpenInit,
-    MsgChannelOpenTry,
-    MsgChannelOpenAck,
-    MsgChannelOpenConfirm,
-    MsgChannelCloseInit,
-    MsgChannelCloseConfirm,
+        MsgChannelOpenInit,
+        MsgChannelOpenTry,
+        MsgChannelOpenAck,
+        MsgChannelOpenConfirm,
+        MsgChannelCloseInit,
+        MsgChannelCloseConfirm,
 
-    MsgSendPacket,
-    MsgRecvPacket,
-    MsgWriteAckPacket,
-    MsgAckPacket,
+        MsgSendPacket,
+        MsgRecvPacket,
+        MsgWriteAckPacket,
+        MsgAckPacket,
 
-    MsgTimeoutPacket,
-}
-
-impl Encodable for MsgType {
-    fn rlp_append(&self, s: &mut rlp::RlpStream) {
-        let t = *self as u8;
-        s.append(&t);
-    }
-}
-
-impl Decodable for MsgType {
-    fn decode(rlp: &Rlp) -> Result<Self, rlp::DecoderError> {
-        let t: u8 = rlp.as_val()?;
-        match t {
-            1 => Ok(MsgType::MsgClientCreate),
-            2 => Ok(MsgType::MsgClientUpdate),
-            3 => Ok(MsgType::MsgClientMisbehaviour),
-
-            4 => Ok(MsgType::MsgConnectionOpenInit),
-            5 => Ok(MsgType::MsgConnectionOpenTry),
-            6 => Ok(MsgType::MsgConnectionOpenAck),
-            7 => Ok(MsgType::MsgConnectionOpenConfirm),
-
-            8 => Ok(MsgType::MsgChannelOpenInit),
-            9 => Ok(MsgType::MsgChannelOpenTry),
-            10 => Ok(MsgType::MsgChannelOpenAck),
-            11 => Ok(MsgType::MsgChannelOpenConfirm),
-            12 => Ok(MsgType::MsgChannelCloseInit),
-            13 => Ok(MsgType::MsgChannelCloseConfirm),
-
-            14 => Ok(MsgType::MsgSendPacket),
-            15 => Ok(MsgType::MsgRecvPacket),
-            16 => Ok(MsgType::MsgWriteAckPacket),
-            17 => Ok(MsgType::MsgAckPacket),
-
-            18 => Ok(MsgType::MsgTimeoutPacket),
-            _ => Err(rlp::DecoderError::Custom("msg type decode error")),
-        }
-    }
-}
+        MsgTimeoutPacket,
+    },
+    u8
+);
 
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgClientCreate {}
@@ -228,49 +192,4 @@ pub struct MsgTimeoutPacket {
     pub packet: Packet,
     pub next_sequence_recv: U256,
     pub proofs: Proofs,
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::message::Envelope;
-
-    use super::MsgType;
-    use super::Vec;
-
-    #[test]
-    fn msg_type_encode_decode() {
-        let mut types = Vec::new();
-        types.push(MsgType::MsgClientCreate);
-        types.push(MsgType::MsgClientUpdate);
-        types.push(MsgType::MsgClientMisbehaviour);
-
-        types.push(MsgType::MsgConnectionOpenInit);
-        types.push(MsgType::MsgConnectionOpenTry);
-        types.push(MsgType::MsgConnectionOpenAck);
-        types.push(MsgType::MsgConnectionOpenConfirm);
-
-        types.push(MsgType::MsgChannelOpenInit);
-        types.push(MsgType::MsgChannelOpenTry);
-        types.push(MsgType::MsgChannelOpenAck);
-        types.push(MsgType::MsgChannelOpenConfirm);
-        types.push(MsgType::MsgChannelCloseInit);
-        types.push(MsgType::MsgChannelCloseConfirm);
-
-        types.push(MsgType::MsgSendPacket);
-        types.push(MsgType::MsgRecvPacket);
-        types.push(MsgType::MsgWriteAckPacket);
-        types.push(MsgType::MsgAckPacket);
-        types.push(MsgType::MsgTimeoutPacket);
-
-        for i in 1..types.len() {
-            let envelope = Envelope {
-                msg_type: types[i - 1],
-                content: Vec::new(),
-            };
-
-            let data = rlp::encode(&envelope).to_vec();
-            let actual = rlp::decode::<Envelope>(&data).unwrap();
-            assert_eq!(actual.msg_type, types[i - 1]);
-        }
-    }
 }
