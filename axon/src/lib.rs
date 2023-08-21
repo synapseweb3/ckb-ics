@@ -9,6 +9,38 @@ use core::str::FromStr;
 use alloc::string::String;
 pub use alloc::vec::Vec;
 
+/// Implement rlp::{Encodable, Decodable} for enum.
+///
+/// Encoding will be the same as the repr type.
+///
+/// The second parameter must be the same as the repr type.
+macro_rules! impl_enum_rlp {
+    ($(#[$meta:meta])* $vis:vis enum $name:ident {
+        $($(#[$vmeta:meta])* $vname:ident $(= $val:expr)?,)*
+    }, $type:ty) => {
+        $(#[$meta])*
+        $vis enum $name {
+            $($(#[$vmeta])* $vname $(= $val)?,)*
+        }
+
+        impl rlp::Encodable for $name {
+            fn rlp_append(&self, s: &mut rlp::RlpStream) {
+                (*self as $type).rlp_append(s);
+            }
+        }
+
+        impl rlp::Decodable for $name {
+            fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+                let v: $type = rlp::Decodable::decode(rlp)?;
+                match v {
+                    $(x if x == $name::$vname as $type => Ok($name::$vname),)*
+                    _ => Err(rlp::DecoderError::Custom(concat!("invalid value for ", stringify!($name)))),
+                }
+            }
+        }
+    }
+}
+
 pub mod consts;
 pub mod handler;
 pub mod message;
