@@ -1,4 +1,3 @@
 [workspace]
-members = [
-    "axon",
-]
+resolver = "2"
+members = ["axon"]
