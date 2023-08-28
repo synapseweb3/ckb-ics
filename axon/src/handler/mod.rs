@@ -565,10 +565,6 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongPacketContent);
     }
 
-    if old_ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends {
-        return Err(VerifyError::WrongPacketSequence);
-    }
-
     let is_unorder = if old_channel.order == Ordering::Unordered {
         true
     } else {
