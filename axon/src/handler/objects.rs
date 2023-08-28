@@ -68,7 +68,7 @@ impl IbcChannel {
     }
 }
 
-#[derive(RlpEncodable, RlpDecodable)]
+#[derive(RlpEncodable, RlpDecodable, Debug, Clone)]
 pub struct IbcPacket {
     pub packet: Packet,
     pub tx_hash: Option<H256>,
@@ -76,7 +76,7 @@ pub struct IbcPacket {
 }
 
 impl_enum_rlp! {
-    #[derive(PartialEq, Eq, Clone, Copy)]
+    #[derive(PartialEq, Eq, Clone, Copy, Debug)]
     #[repr(u8)]
     pub enum PacketStatus {
         Send = 1,

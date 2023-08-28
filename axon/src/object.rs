@@ -117,7 +117,7 @@ pub struct Proofs {
     pub client_proof: Vec<u8>,
 }
 
-#[derive(Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
+#[derive(Clone, PartialEq, Eq, RlpEncodable, RlpDecodable, Debug)]
 pub struct Packet {
     pub sequence: u16,
     pub source_port_id: String,
