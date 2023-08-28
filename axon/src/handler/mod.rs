@@ -503,9 +503,9 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if packet_args.port_id != convert_hex_to_port_id(&ibc_packet.packet.source_port_id)?
+    if packet_args.port_id != convert_hex_to_port_id(&ibc_packet.packet.destination_port_id)?
         || packet_args.sequence != ibc_packet.packet.sequence
-        || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
+        || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.destination_channel_id
     {
         return Err(VerifyError::WrongPacketArgs);
     }
