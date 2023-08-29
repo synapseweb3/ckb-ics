@@ -6,7 +6,8 @@ use crate::consts::COMMITMENT_PREFIX;
 use crate::message::{
     Envelope, MsgAckPacket, MsgChannelOpenAck, MsgChannelOpenConfirm, MsgChannelOpenInit,
     MsgChannelOpenTry, MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
-    MsgConnectionOpenTry, MsgRecvPacket, MsgSendPacket, MsgType, MsgWriteAckPacket,
+    MsgConnectionOpenTry, MsgConsumeAckPacket, MsgRecvPacket, MsgSendPacket, MsgType,
+    MsgWriteAckPacket,
 };
 use crate::object::{
     ChannelCounterparty, ChannelEnd, ConnectionCounterparty, ConnectionEnd, Ordering, PacketAck,
@@ -565,10 +566,6 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongPacketContent);
     }
 
-    if old_ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends {
-        return Err(VerifyError::WrongPacketSequence);
-    }
-
     let is_unorder = if old_channel.order == Ordering::Unordered {
         true
     } else {
@@ -612,6 +609,18 @@ pub fn handle_msg_write_ack_packet(
 
     if old_ibc_packet.packet != new_ibc_packet.packet {
         return Err(VerifyError::WrongPacketContent);
+    }
+
+    Ok(())
+}
+
+pub fn handle_msg_consume_ack_packet(
+    old_ibc_packet: IbcPacket,
+    _: PacketArgs,
+    _: MsgConsumeAckPacket,
+) -> Result<(), VerifyError> {
+    if old_ibc_packet.status != PacketStatus::Ack {
+        return Err(VerifyError::WrongPacketStatus);
     }
 
     Ok(())
