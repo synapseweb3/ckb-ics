@@ -37,8 +37,9 @@ impl_enum_rlp!(
         MsgRecvPacket,
         MsgWriteAckPacket,
         MsgAckPacket,
-
         MsgTimeoutPacket,
+
+        MsgConsumeAckPacket,
     },
     u8
 );
@@ -187,9 +188,15 @@ pub struct MsgWriteAckPacket {
     pub ack: Vec<u8>,
 }
 
+// If timeout block_number is set in Packet and reached, using MsgTimeoutPacket instead
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgTimeoutPacket {
     pub packet: Packet,
     pub next_sequence_recv: U256,
     pub proofs: Proofs,
 }
+
+// It's additional msg type which isn't contained in IBC, and just used
+// in Business side to be consumed to obtain its capacity
+#[derive(RlpDecodable, RlpEncodable)]
+pub struct MsgConsumeAckPacket {}
