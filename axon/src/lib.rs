@@ -149,9 +149,9 @@ impl PacketArgs {
         if slice.len() != 36 {
             return Err(VerifyError::WrongPacketArgs);
         }
-        let channel_id = u16::from_le_bytes(slice[0..2].try_into().unwrap());
+        let channel_id = u16::from_be_bytes(slice[0..2].try_into().unwrap());
         let port_id = slice[2..34].try_into().unwrap();
-        let sequence = u16::from_le_bytes(slice[34..36].try_into().unwrap());
+        let sequence = u16::from_be_bytes(slice[34..36].try_into().unwrap());
         Ok(PacketArgs {
             channel_id,
             port_id,
@@ -161,10 +161,10 @@ impl PacketArgs {
 
     pub fn get_search_args(self, search_all: bool) -> Vec<u8> {
         let mut result = Vec::new();
-        result.extend(self.channel_id.to_le_bytes());
+        result.extend(self.channel_id.to_be_bytes());
         result.extend(self.port_id);
         if !search_all {
-            result.extend(self.sequence.to_le_bytes());
+            result.extend(self.sequence.to_be_bytes());
         }
         result
     }
