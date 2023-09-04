@@ -445,6 +445,12 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongPacketArgs);
     }
 
+    if ibc_packet.packet.destination_channel_id != old_channel.counterparty.channel_id
+        || ibc_packet.packet.destination_port_id != old_channel.counterparty.port_id
+    {
+        return Err(VerifyError::WrongPacketContent);
+    }
+
     if !old_channel
         .sequence
         .next_send_packet_is(&new_channel.sequence)

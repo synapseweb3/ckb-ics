@@ -428,10 +428,12 @@ fn test_handle_msg_send_packet_success() {
     };
     let msg = MsgSendPacket {};
 
-    let packet = Packet::default();
-
     let ibc_packet = IbcPacket {
-        packet,
+        packet: Packet {
+            destination_channel_id: old_channel.counterparty.channel_id.clone(),
+            destination_port_id: old_channel.counterparty.port_id.clone(),
+            ..Default::default()
+        },
         tx_hash: None,
         status: PacketStatus::Send,
     };
