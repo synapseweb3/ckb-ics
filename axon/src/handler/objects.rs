@@ -17,7 +17,7 @@ pub struct IbcConnections {
     pub connections: Vec<ConnectionEnd>,
 }
 
-#[derive(Debug, Clone, RlpDecodable, RlpEncodable)]
+#[derive(Debug, Clone, RlpDecodable, RlpEncodable, PartialEq, Eq)]
 pub struct IbcChannel {
     pub number: u16,
     pub port_id: String,
