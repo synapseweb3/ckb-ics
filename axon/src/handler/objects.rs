@@ -73,6 +73,7 @@ pub struct IbcPacket {
     pub packet: Packet,
     pub tx_hash: Option<H256>,
     pub status: PacketStatus,
+    pub ack: Option<Vec<u8>>,
 }
 
 impl_enum_rlp! {

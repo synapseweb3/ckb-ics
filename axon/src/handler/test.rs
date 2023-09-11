@@ -436,6 +436,7 @@ fn test_handle_msg_send_packet_success() {
         },
         tx_hash: None,
         status: PacketStatus::Send,
+        ack: None,
     };
 
     let old_channel_args = ChannelArgs::default();
@@ -477,6 +478,7 @@ fn test_msg_recv_packet_success() {
         packet: Packet::default(),
         tx_hash: None,
         status: PacketStatus::Recv,
+        ack: None,
     };
     let old_channel_args = ChannelArgs::default();
     let new_channel_args = ChannelArgs::default();
@@ -511,11 +513,13 @@ fn test_msg_ack_outbox_packet_success() {
         packet: packet.clone(),
         tx_hash: None,
         status: PacketStatus::Recv,
+        ack: None,
     };
     let new_ibc_packet = IbcPacket {
         packet,
         tx_hash: None,
         status: PacketStatus::WriteAck,
+        ack: Some(vec![1]),
     };
     handle_msg_write_ack_packet(
         old_channel,
@@ -526,7 +530,7 @@ fn test_msg_ack_outbox_packet_success() {
         PacketArgs::default(),
         new_ibc_packet,
         PacketArgs::default(),
-        MsgWriteAckPacket { ack: vec![] },
+        MsgWriteAckPacket {},
     )
     .unwrap();
 }
@@ -545,11 +549,13 @@ fn test_msg_write_ack_packet_channel_state_error() {
         packet: old_packet,
         tx_hash: None,
         status: PacketStatus::Recv,
+        ack: None,
     };
     let new_ibc_packet = IbcPacket {
         packet: new_packet,
         tx_hash: None,
         status: PacketStatus::WriteAck,
+        ack: Some(vec![1]),
     };
     if let Err(VerifyError::WrongChannelState) = handle_msg_write_ack_packet(
         old_channel,
@@ -560,7 +566,7 @@ fn test_msg_write_ack_packet_channel_state_error() {
         PacketArgs::default(),
         new_ibc_packet,
         PacketArgs::default(),
-        MsgWriteAckPacket { ack: Vec::new() },
+        MsgWriteAckPacket {},
     ) {
     } else {
         panic!()
@@ -582,11 +588,13 @@ fn test_msg_ack_outbox_packet_differenct_packet() {
         packet: old_packet,
         tx_hash: None,
         status: PacketStatus::Recv,
+        ack: None,
     };
     let new_ibc_packet = IbcPacket {
         packet: new_packet,
         tx_hash: None,
         status: PacketStatus::WriteAck,
+        ack: None,
     };
     if let Err(VerifyError::WrongPacketContent) = handle_msg_write_ack_packet(
         old_channel,
@@ -597,7 +605,7 @@ fn test_msg_ack_outbox_packet_differenct_packet() {
         PacketArgs::default(),
         new_ibc_packet,
         PacketArgs::default(),
-        MsgWriteAckPacket { ack: Vec::new() },
+        MsgWriteAckPacket {},
     ) {
     } else {
         panic!()
