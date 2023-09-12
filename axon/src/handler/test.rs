@@ -500,6 +500,12 @@ fn test_msg_recv_packet_success() {
 
 #[test]
 fn test_msg_ack_outbox_packet_success() {
+    let mut old_channel = IbcChannel::default();
+    old_channel.state = State::Open;
+    let old_channel_args = ChannelArgs::default();
+    let new_channel = old_channel.clone();
+    let new_channel_args = ChannelArgs::default();
+
     let packet = Packet::default();
     let old_ibc_packet = IbcPacket {
         packet: packet.clone(),
@@ -512,6 +518,10 @@ fn test_msg_ack_outbox_packet_success() {
         status: PacketStatus::WriteAck,
     };
     handle_msg_write_ack_packet(
+        old_channel,
+        old_channel_args,
+        new_channel,
+        new_channel_args,
         old_ibc_packet,
         PacketArgs::default(),
         new_ibc_packet,
@@ -522,7 +532,49 @@ fn test_msg_ack_outbox_packet_success() {
 }
 
 #[test]
+fn test_msg_write_ack_packet_channel_state_error() {
+    let mut old_channel = IbcChannel::default();
+    old_channel.state = State::Init;
+    let old_channel_args = ChannelArgs::default();
+    let new_channel = old_channel.clone();
+    let new_channel_args = ChannelArgs::default();
+
+    let old_packet = Packet::default();
+    let new_packet = old_packet.clone();
+    let old_ibc_packet = IbcPacket {
+        packet: old_packet,
+        tx_hash: None,
+        status: PacketStatus::Recv,
+    };
+    let new_ibc_packet = IbcPacket {
+        packet: new_packet,
+        tx_hash: None,
+        status: PacketStatus::WriteAck,
+    };
+    if let Err(VerifyError::WrongChannelState) = handle_msg_write_ack_packet(
+        old_channel,
+        old_channel_args,
+        new_channel,
+        new_channel_args,
+        old_ibc_packet,
+        PacketArgs::default(),
+        new_ibc_packet,
+        PacketArgs::default(),
+        MsgWriteAckPacket { ack: Vec::new() },
+    ) {
+    } else {
+        panic!()
+    }
+}
+
+#[test]
 fn test_msg_ack_outbox_packet_differenct_packet() {
+    let mut old_channel = IbcChannel::default();
+    old_channel.state = State::Open;
+    let old_channel_args = ChannelArgs::default();
+    let new_channel = old_channel.clone();
+    let new_channel_args = ChannelArgs::default();
+
     let old_packet = Packet::default();
     let mut new_packet = old_packet.clone();
     new_packet.sequence = 1;
@@ -537,6 +589,10 @@ fn test_msg_ack_outbox_packet_differenct_packet() {
         status: PacketStatus::WriteAck,
     };
     if let Err(VerifyError::WrongPacketContent) = handle_msg_write_ack_packet(
+        old_channel,
+        old_channel_args,
+        new_channel,
+        new_channel_args,
         old_ibc_packet,
         PacketArgs::default(),
         new_ibc_packet,

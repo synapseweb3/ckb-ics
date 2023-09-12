@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use rlp::decode;
@@ -597,12 +599,24 @@ pub fn handle_msg_ack_packet<C: Client>(
 }
 
 pub fn handle_msg_write_ack_packet(
+    old_channel: IbcChannel,
+    old_channel_args: ChannelArgs,
+    new_channel: IbcChannel,
+    new_channel_args: ChannelArgs,
     old_ibc_packet: IbcPacket,
     old_packet_args: PacketArgs,
     new_ibc_packet: IbcPacket,
     new_packet_args: PacketArgs,
     _: MsgWriteAckPacket,
 ) -> Result<(), VerifyError> {
+    if old_channel_args != new_channel_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    if old_channel.state != State::Open || old_channel != new_channel {
+        return Err(VerifyError::WrongChannelState);
+    }
+
     if old_ibc_packet.status != PacketStatus::Recv
         && new_ibc_packet.status != PacketStatus::WriteAck
     {
