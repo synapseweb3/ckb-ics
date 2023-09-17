@@ -472,6 +472,10 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongPacketSequence);
     }
 
+    if ibc_packet.ack.is_some() {
+        return Err(VerifyError::WrongPacketAck);
+    }
+
     Ok(())
 }
 
@@ -506,6 +510,10 @@ pub fn handle_msg_recv_packet<C: Client>(
 
     if ibc_packet.status != PacketStatus::Recv {
         return Err(VerifyError::WrongPacketStatus);
+    }
+
+    if ibc_packet.ack.is_some() {
+        return Err(VerifyError::WrongPacketAck);
     }
 
     if old_channel_args != new_channel_args {
@@ -590,8 +598,12 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongChannelSequence);
     }
 
+    if old_ibc_packet.ack.is_some() || new_ibc_packet.ack.is_none() {
+        return Err(VerifyError::WrongPacketAck);
+    }
+
     let object = PacketAck {
-        ack: msg.acknowledgement,
+        ack: new_ibc_packet.ack.unwrap(),
         packet: new_ibc_packet.packet,
     };
 
@@ -629,6 +641,10 @@ pub fn handle_msg_write_ack_packet(
 
     if old_ibc_packet.packet != new_ibc_packet.packet {
         return Err(VerifyError::WrongPacketContent);
+    }
+
+    if old_ibc_packet.ack.is_some() || new_ibc_packet.ack.is_none() {
+        return Err(VerifyError::WrongPacketAck);
     }
 
     Ok(())

@@ -2,7 +2,7 @@
 /// suffix `a or b` according to Cosmos's convention.
 use super::object::*;
 use super::Vec;
-use super::{Bytes, U256};
+use super::U256;
 // use axon_protocol::types::{Bytes, U256};
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
@@ -176,17 +176,12 @@ pub struct MsgRecvPacket {
 
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgAckPacket {
-    // pub packet: Packet,
-    pub acknowledgement: Bytes,
     pub proofs: Proofs,
 }
 
 // Business side sends this message after handling MsgRecvPacket
 #[derive(RlpDecodable, RlpEncodable)]
-pub struct MsgWriteAckPacket {
-    // pub packet: Packet,
-    pub ack: Vec<u8>,
-}
+pub struct MsgWriteAckPacket {}
 
 // If timeout block_number is set in Packet and reached, using MsgTimeoutPacket instead
 #[derive(RlpDecodable, RlpEncodable)]
