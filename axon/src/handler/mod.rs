@@ -491,12 +491,23 @@ pub fn handle_msg_recv_packet<C: Client>(
     packet_args: PacketArgs,
     msg: MsgRecvPacket,
 ) -> Result<(), VerifyError> {
+    // TODO: use Axon proof to check this useless ibc_packet is INDEED useless
     if let Some(ibc_packed) = useless_ibc_packet {
-        if ibc_packed.status != PacketStatus::WriteAck
-            // TODO: use Axon proof to check this useless ibc_packet is INDEED useless
-            || ibc_packed.packet.sequence + 3 >= old_channel.sequence.next_sequence_recvs
-        {
+        if ibc_packed.status != PacketStatus::WriteAck {
             return Err(VerifyError::WrongUnusedPacket);
+        }
+        if old_channel.order == Ordering::Ordered
+            && ibc_packed.packet.sequence >= old_channel.sequence.next_sequence_recvs
+        {
+            return Err(VerifyError::WrongUnusedPacketOrder);
+        }
+        if old_channel.order == Ordering::Unordered
+            && !old_channel
+                .sequence
+                .received_sequences
+                .contains(&ibc_packed.packet.sequence)
+        {
+            return Err(VerifyError::WrongUnusedPacketUnorder);
         }
     }
 

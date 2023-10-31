@@ -502,8 +502,10 @@ fn test_msg_recv_packet_success() {
 
 #[test]
 fn test_msg_ack_outbox_packet_success() {
-    let mut old_channel = IbcChannel::default();
-    old_channel.state = State::Open;
+    let old_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
     let old_channel_args = ChannelArgs::default();
     let new_channel = old_channel.clone();
     let new_channel_args = ChannelArgs::default();
@@ -537,8 +539,10 @@ fn test_msg_ack_outbox_packet_success() {
 
 #[test]
 fn test_msg_write_ack_packet_channel_state_error() {
-    let mut old_channel = IbcChannel::default();
-    old_channel.state = State::Init;
+    let old_channel = IbcChannel {
+        state: State::Init,
+        ..Default::default()
+    };
     let old_channel_args = ChannelArgs::default();
     let new_channel = old_channel.clone();
     let new_channel_args = ChannelArgs::default();
@@ -575,8 +579,10 @@ fn test_msg_write_ack_packet_channel_state_error() {
 
 #[test]
 fn test_msg_ack_outbox_packet_differenct_packet() {
-    let mut old_channel = IbcChannel::default();
-    old_channel.state = State::Open;
+    let old_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
     let old_channel_args = ChannelArgs::default();
     let new_channel = old_channel.clone();
     let new_channel_args = ChannelArgs::default();
