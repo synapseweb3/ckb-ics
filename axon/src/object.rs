@@ -48,6 +48,8 @@ pub enum VerifyError {
     WrongChannelSequence,
 
     WrongUnusedPacket,
+    WrongUnusedPacketOrder,
+    WrongUnusedPacketUnorder,
     WrongPacketSequence,
     WrongPacketStatus,
     WrongPacketContent,
