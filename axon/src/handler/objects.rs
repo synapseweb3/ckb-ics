@@ -4,10 +4,7 @@ use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
 use crate::convert_byte32_to_hex;
-use crate::object::{
-    ChannelCounterparty, ConnectionEnd, Object, Ordering, Packet, State, VerifyError,
-};
-use crate::proof::ObjectProof;
+use crate::object::{ChannelCounterparty, ConnectionEnd, Ordering, Packet, State, VerifyError};
 
 #[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcConnections {
@@ -174,5 +171,15 @@ impl Sequence {
 pub trait Client {
     fn client_id(&self) -> &[u8; 32];
 
-    fn verify_object<O: Object>(&mut self, obj: O, proof: ObjectProof) -> Result<(), VerifyError>;
+    fn verify_membership(
+        &self,
+        // height: Height,
+        // delay_time_period: u64,
+        // delay_block_period: u64,
+        proof: &[u8],
+        // Assume prefix is always "ibc". This is true for axon and ckb.
+        // prefix: &[u8],
+        path: &[u8],
+        value: &[u8],
+    ) -> Result<(), VerifyError>;
 }

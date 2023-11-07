@@ -12,13 +12,6 @@ use rlp_derive::RlpEncodable;
 
 use super::U256;
 
-// ChannelEnd, ConnectionEnd
-pub trait Object: Sized {
-    fn encode(&self) -> Vec<u8>;
-
-    fn decode(_: &[u8]) -> Result<Self, VerifyError>;
-}
-
 #[derive(Debug)]
 #[repr(i8)]
 pub enum VerifyError {
@@ -147,16 +140,6 @@ impl Default for Packet {
     }
 }
 
-impl Object for Packet {
-    fn encode(&self) -> Vec<u8> {
-        rlp::encode(self).to_vec()
-    }
-
-    fn decode(data: &[u8]) -> Result<Self, VerifyError> {
-        rlp::decode(data).map_err(|_| VerifyError::SerdeError)
-    }
-}
-
 impl Packet {
     pub fn equal_unless_sequence(&self, other: &Self) -> bool {
         (
@@ -215,16 +198,6 @@ impl Default for ConnectionEnd {
     }
 }
 
-impl Object for ConnectionEnd {
-    fn encode(&self) -> Vec<u8> {
-        rlp::encode(self).to_vec()
-    }
-
-    fn decode(data: &[u8]) -> Result<Self, VerifyError> {
-        rlp::decode(data).map_err(|_| VerifyError::SerdeError)
-    }
-}
-
 #[derive(RlpEncodable, RlpDecodable)]
 pub struct ChannelEnd {
     pub state: State,
@@ -232,31 +205,4 @@ pub struct ChannelEnd {
     pub remote: ChannelCounterparty,
     pub connection_hops: Vec<String>,
     // pub version: CString,
-}
-
-impl Object for ChannelEnd {
-    fn encode(&self) -> Vec<u8> {
-        rlp::encode(self).to_vec()
-    }
-
-    fn decode(data: &[u8]) -> Result<Self, VerifyError> {
-        rlp::decode(data).map_err(|_| VerifyError::SerdeError)
-    }
-}
-
-// The ack of the packet
-#[derive(RlpDecodable, RlpEncodable)]
-pub struct PacketAck {
-    pub ack: Vec<u8>,
-    pub packet: Packet,
-}
-
-impl Object for PacketAck {
-    fn encode(&self) -> Vec<u8> {
-        rlp::encode(self).to_vec()
-    }
-
-    fn decode(data: &[u8]) -> Result<Self, VerifyError> {
-        rlp::decode(data).map_err(|_| VerifyError::SerdeError)
-    }
 }

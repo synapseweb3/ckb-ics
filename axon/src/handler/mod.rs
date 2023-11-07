@@ -2,6 +2,7 @@
 
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use prost::Message;
 use rlp::decode;
 
 use crate::consts::COMMITMENT_PREFIX;
@@ -12,9 +13,10 @@ use crate::message::{
     MsgWriteAckPacket,
 };
 use crate::object::{
-    ChannelCounterparty, ChannelEnd, ConnectionCounterparty, ConnectionEnd, Ordering, PacketAck,
-    State, VerifyError,
+    ChannelCounterparty, ChannelEnd, Ordering, State,
+    VerifyError,
 };
+use crate::{commitment::*, proto};
 use crate::{
     convert_byte32_to_hex, convert_connection_id_to_index, convert_hex_to_client_id,
     convert_hex_to_port_id, get_channel_id_str,
@@ -64,7 +66,7 @@ pub fn handle_msg_connection_open_init<C: Client>(
 }
 
 pub fn handle_msg_connection_open_try<C: Client>(
-    mut client: C,
+    client: C,
     old_connections: IbcConnections,
     old_args: ConnectionArgs,
     new_connections: IbcConnections,
@@ -98,25 +100,50 @@ pub fn handle_msg_connection_open_try<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
-    let expected_connection_end_on_counterparty = ConnectionEnd {
-        state: State::Init,
+    let counterparty = &connection.counterparty;
+
+    let expected_connection_end_on_counterparty = proto::connection::ConnectionEnd {
+        state: proto::connection::State::Init as _,
+        // XXX: should be msg_.counterparty.clientId
         client_id: connection.client_id.clone(),
-        counterparty: ConnectionCounterparty {
+        counterparty: Some(proto::connection::Counterparty {
             client_id: convert_byte32_to_hex(client.client_id()),
-            connection_id: None,
-            commitment_prefix: COMMITMENT_PREFIX.to_vec(),
-        },
+            connection_id: "".to_string(),
+            prefix: Some(proto::commitment::MerklePrefix {
+                key_prefix: COMMITMENT_PREFIX.to_vec(),
+            }),
+        }),
         delay_period: connection.delay_period,
+        // XXX: should be msg_.counterpartyVersions
         versions: vec![Default::default()],
     };
 
-    let object_proof = msg.proof.object_proof;
+    verify_connection_state(
+        &client,
+        &msg.proof.client_proof[..],
+        counterparty.connection_id.as_deref().unwrap(),
+        &expected_connection_end_on_counterparty,
+    )?;
 
-    client.verify_object(expected_connection_end_on_counterparty, object_proof)
+    // TODO: verify client.
+    Ok(())
+}
+
+fn verify_connection_state(
+    client: &impl Client,
+    proof: &[u8],
+    connection_id: &str,
+    connection: &proto::connection::ConnectionEnd,
+) -> Result<(), VerifyError> {
+    client.verify_membership(
+        proof,
+        connection_path(connection_id).as_bytes(),
+        &connection.encode_to_vec(),
+    )
 }
 
 pub fn handle_msg_connection_open_ack<C: Client>(
-    mut client: C,
+    client: C,
     old: IbcConnections,
     old_args: ConnectionArgs,
     new: IbcConnections,
@@ -156,22 +183,38 @@ pub fn handle_msg_connection_open_ack<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
-    let expected = ConnectionEnd {
-        state: State::Open,
+    let expected = proto::connection::ConnectionEnd {
+        state: proto::connection::State::Tryopen as _,
         client_id: new_connection.counterparty.client_id.clone(),
-        counterparty: ConnectionCounterparty {
+        counterparty: Some(proto::connection::Counterparty {
             client_id: convert_byte32_to_hex(client.client_id()),
-            connection_id: Some(conn_idx.to_string()),
-            commitment_prefix: COMMITMENT_PREFIX.to_vec(),
-        },
+            connection_id: format!("connection-{conn_idx}"),
+            prefix: Some(proto::commitment::MerklePrefix {
+                key_prefix: COMMITMENT_PREFIX.to_vec(),
+            }),
+        }),
         delay_period: new_connection.delay_period,
+        // XXX
         versions: vec![Default::default()],
     };
-    client.verify_object(expected, msg.proof_conn_end_on_b.object_proof)
+
+    verify_connection_state(
+        &client,
+        &msg.proof_conn_end_on_b.client_proof,
+        new_connection
+            .counterparty
+            .connection_id
+            .as_deref()
+            .unwrap(),
+        &expected,
+    )?;
+
+    // TODO: verify client.
+    Ok(())
 }
 
 pub fn handle_msg_connection_open_confirm<C: Client>(
-    mut client: C,
+    client: C,
     old: IbcConnections,
     old_args: ConnectionArgs,
     new: IbcConnections,
@@ -205,19 +248,34 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     if old_connection.state != State::OpenTry || new_connection.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
     }
-    let expected = ConnectionEnd {
-        state: State::Open,
+    let expected = proto::connection::ConnectionEnd {
+        state: proto::connection::State::Open as _,
         client_id: new_connection.counterparty.client_id.clone(),
-        counterparty: ConnectionCounterparty {
+        counterparty: Some(proto::connection::Counterparty {
             client_id: convert_byte32_to_hex(client.client_id()),
-            connection_id: Some(conn_idx.to_string()),
-            commitment_prefix: COMMITMENT_PREFIX.to_vec(),
-        },
+            connection_id: format!("connection-{conn_idx}"),
+            prefix: Some(proto::commitment::MerklePrefix {
+                key_prefix: COMMITMENT_PREFIX.to_vec(),
+            }),
+        }),
         delay_period: new_connection.delay_period,
         versions: vec![Default::default()],
     };
 
-    client.verify_object(expected, msg.proofs.object_proof)
+    verify_connection_state(
+        &client,
+        &msg.proofs.client_proof,
+        new_connection
+            .counterparty
+            .connection_id
+            .as_deref()
+            .unwrap(),
+        &expected,
+    )?;
+
+    // TODO: verify client.
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -294,10 +352,10 @@ pub fn handle_msg_channel_open_init<C: Client>(
 }
 
 pub fn handle_msg_channel_open_try<C: Client>(
-    mut client: C,
+    client: C,
     ibc_connections: &IbcConnections,
     new: IbcChannel,
-    msg: MsgChannelOpenTry,
+    _msg: MsgChannelOpenTry,
 ) -> Result<(), VerifyError> {
     if new.connection_hops.is_empty() {
         return Err(VerifyError::ConnectionsWrong);
@@ -320,7 +378,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
-    let object = ChannelEnd {
+    let _object = ChannelEnd {
         state: State::Init,
         ordering: new.order,
         remote: ChannelCounterparty {
@@ -330,7 +388,8 @@ pub fn handle_msg_channel_open_try<C: Client>(
         connection_hops: Vec::new(),
     };
 
-    client.verify_object(object, msg.proof_chan_end_on_a.object_proof)
+    // TODO: verify proof.
+    Ok(())
 }
 
 pub fn handle_channel_open_ack_and_confirm<C: Client>(
@@ -365,10 +424,10 @@ pub fn handle_channel_open_ack_and_confirm<C: Client>(
 }
 
 pub fn handle_msg_channel_open_ack<C: Client>(
-    mut client: C,
+    _client: C,
     old: IbcChannel,
     new: IbcChannel,
-    msg: MsgChannelOpenAck,
+    _msg: MsgChannelOpenAck,
 ) -> Result<(), VerifyError> {
     if !new.equal_unless_state_and_counterparty(&old) {
         return Err(VerifyError::WrongChannel);
@@ -382,7 +441,7 @@ pub fn handle_msg_channel_open_ack<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
-    let object = ChannelEnd {
+    let _object = ChannelEnd {
         state: State::OpenTry,
         ordering: new.order,
         remote: ChannelCounterparty {
@@ -392,14 +451,15 @@ pub fn handle_msg_channel_open_ack<C: Client>(
         connection_hops: Vec::new(),
     };
 
-    client.verify_object(object, msg.proofs.object_proof)
+    // TODO: verify proof.
+    Ok(())
 }
 
 pub fn handle_msg_channel_open_confirm<C: Client>(
-    mut client: C,
+    _client: C,
     old: IbcChannel,
     new: IbcChannel,
-    msg: MsgChannelOpenConfirm,
+    _msg: MsgChannelOpenConfirm,
 ) -> Result<(), VerifyError> {
     if !new.equal_unless_state_and_counterparty(&old) {
         return Err(VerifyError::WrongChannel);
@@ -408,7 +468,7 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
-    let object = ChannelEnd {
+    let _object = ChannelEnd {
         state: State::Open,
         ordering: new.order,
         remote: ChannelCounterparty {
@@ -418,7 +478,8 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
         connection_hops: Vec::new(),
     };
 
-    client.verify_object(object, msg.proofs.object_proof)
+    // TODO: verify proof.
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -481,7 +542,7 @@ pub fn handle_msg_send_packet<C: Client>(
 
 #[allow(clippy::too_many_arguments)]
 pub fn handle_msg_recv_packet<C: Client>(
-    mut client: C,
+    client: C,
     old_channel: IbcChannel,
     old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
@@ -554,12 +615,39 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannelSequence);
     }
 
-    client.verify_object(ibc_packet.packet, msg.proofs.object_proof)
+    // XXX: is this correct?
+    let proof = &msg.proofs.client_proof;
+
+    client.verify_membership(
+        proof,
+        packet_commitment_path(
+            &ibc_packet.packet.source_port_id,
+            &ibc_packet.packet.source_channel_id,
+            ibc_packet.packet.sequence.into(),
+        )
+        .as_bytes(),
+        &sha256(&[
+            &ibc_packet.packet.timeout_timestamp.to_le_bytes(),
+            // Revision number
+            &0u64.to_le_bytes(),
+            &ibc_packet.packet.timeout_height.to_le_bytes(),
+            &sha256(&[&ibc_packet.packet.data]),
+        ]),
+    )
+}
+
+fn sha256(msgs: &[&[u8]]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    for m in msgs {
+        hasher.update(m);
+    }
+    hasher.finalize().into()
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn handle_msg_ack_packet<C: Client>(
-    mut client: C,
+    client: C,
     old_channel: IbcChannel,
     old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
@@ -613,12 +701,19 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongPacketAck);
     }
 
-    let object = PacketAck {
-        ack: new_ibc_packet.ack.unwrap(),
-        packet: new_ibc_packet.packet,
-    };
+    // XXX: is this correct?
+    let proof = &msg.proofs.client_proof;
 
-    client.verify_object(object, msg.proofs.object_proof)
+    client.verify_membership(
+        proof,
+        packet_acknowledgement_commitment_path(
+            &new_ibc_packet.packet.destination_port_id,
+            &new_ibc_packet.packet.destination_channel_id,
+            new_ibc_packet.packet.sequence.into(),
+        )
+        .as_bytes(),
+        &sha256(&[&new_ibc_packet.ack.unwrap()]),
+    )
 }
 
 pub fn handle_msg_write_ack_packet(

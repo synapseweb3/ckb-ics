@@ -2,8 +2,9 @@ use alloc::string::String;
 
 use crate::consts;
 use crate::handler::*;
-use crate::object::{Object, Packet};
-use crate::proof::ObjectProof;
+use crate::object::ConnectionCounterparty;
+use crate::object::ConnectionEnd;
+use crate::object::Packet;
 
 fn index_to_connection_id(index: usize) -> String {
     format!("{}{index}", consts::CONNECTION_ID_PREFIX)
@@ -15,11 +16,12 @@ pub struct TestClient {
 }
 
 impl Client for TestClient {
-    fn verify_object<O: Object>(
-        &mut self,
-        _obj: O,
-        _proof: ObjectProof,
-    ) -> Result<(), VerifyError> {
+    fn verify_membership(
+            &self,
+            _proof: &[u8],
+            _path: &[u8],
+            _value: &[u8],
+        ) -> Result<(), VerifyError> {
         Ok(())
     }
 

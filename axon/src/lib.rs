@@ -45,15 +45,15 @@ pub mod consts;
 pub mod handler;
 pub mod message;
 pub mod object;
+pub mod commitment;
 pub mod proof;
+pub mod proto;
 pub mod verify_mpt;
 
 use consts::CHANNEL_ID_PREFIX;
 use ethereum_types::H256;
-use object::{Object, VerifyError};
-use proof::TransactionReceipt;
+use object::VerifyError;
 use rlp::{Encodable, RlpStream};
-use verify_mpt::verify_proof;
 
 pub type U256 = Vec<u8>;
 pub type Bytes = Vec<u8>;
@@ -175,45 +175,6 @@ impl PacketArgs {
 
     pub fn to_args(self) -> Vec<u8> {
         self.get_search_args(false)
-    }
-}
-
-pub fn verify_message<O: Object>(
-    receipt_root: H256,
-    receipt: TransactionReceipt,
-    object: O,
-    receipt_proof: Vec<Vec<u8>>,
-) -> Result<(), VerifyError> {
-    if let Some(first) = receipt.logs.first() {
-        if object.encode() != first.data.as_ref() {
-            return Err(VerifyError::InvalidReceiptProof);
-        }
-    } else {
-        return Err(VerifyError::InvalidReceiptProof);
-    }
-    let idx = receipt.transaction_index.as_u64();
-    verify_receipt(object, receipt, receipt_root, receipt_proof, idx)
-}
-
-fn verify_receipt<O: Object>(
-    expect: O,
-    receipt: TransactionReceipt,
-    root: H256,
-    proof: Vec<Vec<u8>>,
-    idx: u64,
-) -> Result<(), VerifyError> {
-    let actual = receipt.logs.first().ok_or(VerifyError::FoundNoMessage)?;
-
-    if expect.encode() != actual.data.as_ref() {
-        return Err(VerifyError::EventNotMatch);
-    }
-
-    let key: Vec<u8> = rlp::encode(&idx).as_ref().into();
-
-    if verify_proof(&proof, root.as_ref(), &key, receipt.rlp_bytes().as_ref()) {
-        Ok(())
-    } else {
-        Err(VerifyError::InvalidReceiptProof)
     }
 }
 
