@@ -1,7 +1,6 @@
 use crate::consts::COMMITMENT_PREFIX;
 use crate::convert_byte32_to_hex;
 use crate::get_channel_id_str;
-use crate::proof::ObjectProof;
 use crate::Bytes;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
@@ -9,8 +8,6 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
-
-use super::U256;
 
 #[derive(Debug)]
 #[repr(i8)]
@@ -104,13 +101,6 @@ impl Default for ConnectionCounterparty {
 pub struct ChannelCounterparty {
     pub port_id: String,
     pub channel_id: String,
-}
-
-#[derive(Default, Debug, RlpEncodable, RlpDecodable)]
-pub struct Proofs {
-    pub height: U256,
-    pub object_proof: ObjectProof,
-    pub client_proof: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, Eq, RlpEncodable, RlpDecodable, Debug)]

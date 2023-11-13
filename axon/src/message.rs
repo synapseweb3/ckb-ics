@@ -1,3 +1,5 @@
+use crate::proto::client::Height;
+
 /// These messages are used to send to CKB. We named some fields with the
 /// suffix `a or b` according to Cosmos's convention.
 use super::object::*;
@@ -69,7 +71,8 @@ pub struct MsgConnectionOpenTry {
     // TODO: this field is useful when CKB is connecting to chains but Axon.
     // pub client_state_of_b_on_a: Bytes,
     // pub counterparty: ConnectionCounterparty,
-    pub proof: Proofs,
+    pub proof_height: Height,
+    pub proof_init: Vec<u8>,
     // pub counterparty_versions: Vec<CString>,
     // pub delay_period: u64,
     // deprecated
@@ -86,7 +89,8 @@ pub struct MsgConnectionOpenAck {
     pub conn_id_on_a: usize,
     // pub conn_id_on_b: String,
     // pub client_state_of_a_on_b: ClientState,
-    pub proof_conn_end_on_b: Proofs,
+    pub proof_height: Height,
+    pub proof_try: Vec<u8>,
     // pub version: CString,
 }
 
@@ -98,7 +102,8 @@ pub struct MsgConnectionOpenConfirm {
     // This message just convey the idx of the connection cell of it
     // and the content of that cell would be stored in witness of the tx.
     pub conn_id_on_b: usize,
-    pub proofs: Proofs,
+    pub proof_height: Height,
+    pub proof_ack: Vec<u8>,
 }
 
 // Per our convention, this message is sent to chain A
@@ -119,7 +124,8 @@ pub struct MsgChannelOpenTry {
     // pub connection_hops_on_b: Vec<CString>,
     // pub port_id_on_a: CString,
     // pub chain_id_on_a: CString,
-    pub proof_chan_end_on_a: Proofs,
+    pub proof_height: Height,
+    pub proof_init: Vec<u8>,
     // pub ordering: Ordering,
     // pub connection_hops_on_a: Vec<String>,
     // pub previous_channal_id: CString,
@@ -132,7 +138,8 @@ pub struct MsgChannelOpenAck {
     /* In CKB tx, these 2 fields are found in cell dep and witness. */
     // pub port_id_on_a: CString,
     // pub chan_id_on_a: CString,
-    pub proofs: Proofs,
+    pub proof_height: Height,
+    pub proof_try: Vec<u8>,
     // pub chain_id_on_b: CString,
     // pub connection_hops_on_b: Vec<String>,
 }
@@ -143,7 +150,8 @@ pub struct MsgChannelOpenConfirm {
     // pub port_id_on_b: CString,
     // pub chain_id_on_b: CString,
     // pub channel_id: ChannelCounterparty,
-    pub proofs: Proofs,
+    pub proof_height: Height,
+    pub proof_ack: Vec<u8>,
     // pub connection_hops_on_b: Vec<String>,
 }
 
@@ -161,7 +169,8 @@ pub struct MsgChannelCloseConfirm {
     /* In CKB tx, these 2 fields are found in witness. */
     // pub port_id_on_b: CString,
     // pub port_id_on_b: CString,
-    pub proofs: Proofs,
+    pub proof_height: Height,
+    pub proof_init: Vec<u8>,
 }
 
 // As our CKB convention, the content of the packet is stored in Witness.
@@ -171,12 +180,14 @@ pub struct MsgSendPacket {}
 
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgRecvPacket {
-    pub proofs: Proofs,
+    pub proof_height: Height,
+    pub proof_commitment: Vec<u8>,
 }
 
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgAckPacket {
-    pub proofs: Proofs,
+    pub proof_height: Height,
+    pub proof_acked: Vec<u8>,
 }
 
 // Business side sends this message after handling MsgRecvPacket
@@ -188,7 +199,8 @@ pub struct MsgWriteAckPacket {}
 pub struct MsgTimeoutPacket {
     pub packet: Packet,
     pub next_sequence_recv: U256,
-    pub proofs: Proofs,
+    pub proof_height: Height,
+    pub proof_unreceived: Vec<u8>,
 }
 
 // It's additional msg type which isn't contained in IBC, and just used

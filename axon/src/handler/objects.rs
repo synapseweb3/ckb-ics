@@ -5,6 +5,7 @@ use rlp_derive::RlpEncodable;
 
 use crate::convert_byte32_to_hex;
 use crate::object::{ChannelCounterparty, ConnectionEnd, Ordering, Packet, State, VerifyError};
+use crate::proto::client::Height;
 
 #[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
 pub struct IbcConnections {
@@ -173,7 +174,7 @@ pub trait Client {
 
     fn verify_membership(
         &self,
-        // height: Height,
+        height: Height,
         // delay_time_period: u64,
         // delay_block_period: u64,
         proof: &[u8],

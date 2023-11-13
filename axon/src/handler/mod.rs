@@ -12,10 +12,8 @@ use crate::message::{
     MsgConnectionOpenTry, MsgConsumeAckPacket, MsgRecvPacket, MsgSendPacket, MsgType,
     MsgWriteAckPacket,
 };
-use crate::object::{
-    ChannelCounterparty, ChannelEnd, Ordering, State,
-    VerifyError,
-};
+use crate::object::{ChannelCounterparty, ChannelEnd, Ordering, State, VerifyError};
+use crate::proto::client::Height;
 use crate::{commitment::*, proto};
 use crate::{
     convert_byte32_to_hex, convert_connection_id_to_index, convert_hex_to_client_id,
@@ -104,8 +102,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
 
     let expected_connection_end_on_counterparty = proto::connection::ConnectionEnd {
         state: proto::connection::State::Init as _,
-        // XXX: should be msg_.counterparty.clientId
-        client_id: connection.client_id.clone(),
+        client_id: counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
             client_id: convert_byte32_to_hex(client.client_id()),
             connection_id: "".to_string(),
@@ -120,22 +117,25 @@ pub fn handle_msg_connection_open_try<C: Client>(
 
     verify_connection_state(
         &client,
-        &msg.proof.client_proof[..],
+        msg.proof_height,
+        &msg.proof_init,
         counterparty.connection_id.as_deref().unwrap(),
         &expected_connection_end_on_counterparty,
     )?;
 
-    // TODO: verify client.
+    // TODO: verify client and consensus.
     Ok(())
 }
 
 fn verify_connection_state(
     client: &impl Client,
+    proof_height: Height,
     proof: &[u8],
     connection_id: &str,
     connection: &proto::connection::ConnectionEnd,
 ) -> Result<(), VerifyError> {
     client.verify_membership(
+        proof_height,
         proof,
         connection_path(connection_id).as_bytes(),
         &connection.encode_to_vec(),
@@ -200,7 +200,8 @@ pub fn handle_msg_connection_open_ack<C: Client>(
 
     verify_connection_state(
         &client,
-        &msg.proof_conn_end_on_b.client_proof,
+        msg.proof_height,
+        &msg.proof_try,
         new_connection
             .counterparty
             .connection_id
@@ -264,7 +265,8 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
 
     verify_connection_state(
         &client,
-        &msg.proofs.client_proof,
+        msg.proof_height,
+        &msg.proof_ack,
         new_connection
             .counterparty
             .connection_id
@@ -615,11 +617,9 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannelSequence);
     }
 
-    // XXX: is this correct?
-    let proof = &msg.proofs.client_proof;
-
     client.verify_membership(
-        proof,
+        msg.proof_height,
+        &msg.proof_commitment,
         packet_commitment_path(
             &ibc_packet.packet.source_port_id,
             &ibc_packet.packet.source_channel_id,
@@ -701,11 +701,9 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongPacketAck);
     }
 
-    // XXX: is this correct?
-    let proof = &msg.proofs.client_proof;
-
     client.verify_membership(
-        proof,
+        msg.proof_height,
+        &msg.proof_acked,
         packet_acknowledgement_commitment_path(
             &new_ibc_packet.packet.destination_port_id,
             &new_ibc_packet.packet.destination_channel_id,

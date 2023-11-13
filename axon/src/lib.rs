@@ -41,12 +41,11 @@ macro_rules! impl_enum_rlp {
     }
 }
 
+pub mod commitment;
 pub mod consts;
 pub mod handler;
 pub mod message;
 pub mod object;
-pub mod commitment;
-pub mod proof;
 pub mod proto;
 pub mod verify_mpt;
 

@@ -5,6 +5,7 @@ use crate::handler::*;
 use crate::object::ConnectionCounterparty;
 use crate::object::ConnectionEnd;
 use crate::object::Packet;
+use crate::proto::client::Height;
 
 fn index_to_connection_id(index: usize) -> String {
     format!("{}{index}", consts::CONNECTION_ID_PREFIX)
@@ -17,11 +18,12 @@ pub struct TestClient {
 
 impl Client for TestClient {
     fn verify_membership(
-            &self,
-            _proof: &[u8],
-            _path: &[u8],
-            _value: &[u8],
-        ) -> Result<(), VerifyError> {
+        &self,
+        _height: Height,
+        _proof: &[u8],
+        _path: &[u8],
+        _value: &[u8],
+    ) -> Result<(), VerifyError> {
         Ok(())
     }
 
@@ -85,7 +87,11 @@ fn test_handle_msg_connection_open_try() {
     };
 
     let msg = MsgConnectionOpenTry {
-        proof: Default::default(),
+        proof_height: Height {
+            revision_height: 0,
+            revision_number: 0,
+        },
+        proof_init: vec![],
     };
     let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
     let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
@@ -107,7 +113,11 @@ fn test_handle_msg_connection_open_ack() {
 
     let msg = MsgConnectionOpenAck {
         conn_id_on_a: 1,
-        proof_conn_end_on_b: Default::default(),
+        proof_height: Height {
+            revision_number: 0,
+            revision_height: 0,
+        },
+        proof_try: vec![],
     };
 
     let old_connection_end = ConnectionEnd {
@@ -161,16 +171,28 @@ fn test_handle_msg_connection_open_confirm() {
 
     let msg = MsgConnectionOpenConfirm {
         conn_id_on_b: 1,
-        proofs: Default::default(),
+        proof_height: Height {
+            revision_number: 0,
+            revision_height: 0,
+        },
+        proof_ack: vec![],
     };
 
     let old_connection_end = ConnectionEnd {
         state: State::OpenTry,
+        counterparty: ConnectionCounterparty {
+            connection_id: Some("connection-1".into()),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
     let new_connection_end = ConnectionEnd {
         state: State::Open,
+        counterparty: ConnectionCounterparty {
+            connection_id: Some("connection-1".into()),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -253,7 +275,11 @@ fn test_handle_msg_channel_open_try_success() {
     };
 
     let msg = MsgChannelOpenTry {
-        proof_chan_end_on_a: Default::default(),
+        proof_height: Height {
+            revision_number: 0,
+            revision_height: 0,
+        },
+        proof_init: vec![],
     };
 
     handle_msg_channel_open_try(client, &new_connections, channel, msg).unwrap()
@@ -282,7 +308,11 @@ fn test_handle_msg_channel_open_ack_success() {
     };
 
     let msg = MsgChannelOpenAck {
-        proofs: Default::default(),
+        proof_height: Height {
+            revision_number: 0,
+            revision_height: 0,
+        },
+        proof_try: vec![],
     };
 
     handle_msg_channel_open_ack(client, old_channel, new_channel, msg).unwrap();
@@ -349,7 +379,11 @@ fn test_handle_msg_channel_open_ack_failed() {
     let envelope = Envelope {
         msg_type: MsgType::MsgChannelOpenAck,
         content: rlp::encode(&MsgChannelOpenAck {
-            proofs: Default::default(),
+            proof_height: Height {
+                revision_number: 0,
+                revision_height: 0,
+            },
+            proof_try: vec![],
         })
         .to_vec(),
     };
@@ -379,7 +413,11 @@ fn handle_msg_channel_open_confirm_success() {
     };
 
     let msg = MsgChannelOpenConfirm {
-        proofs: Default::default(),
+        proof_height: Height {
+            revision_number: 0,
+            revision_height: 0,
+        },
+        proof_ack: vec![],
     };
 
     handle_msg_channel_open_confirm(client, old_channel, new_channel, msg).unwrap();
@@ -401,7 +439,11 @@ fn handle_msg_channel_open_confirm_channel_unmatch() {
     };
 
     let msg = MsgChannelOpenConfirm {
-        proofs: Default::default(),
+        proof_height: Height {
+            revision_number: 0,
+            revision_height: 0,
+        },
+        proof_ack: vec![],
     };
 
     if let Err(VerifyError::WrongChannel) =
@@ -496,7 +538,11 @@ fn test_msg_recv_packet_success() {
         ibc_packet,
         packet_args,
         MsgRecvPacket {
-            proofs: Default::default(),
+            proof_height: Height {
+                revision_number: 0,
+                revision_height: 0,
+            },
+            proof_commitment: vec![],
         },
     )
     .unwrap();
