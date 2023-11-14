@@ -2,6 +2,7 @@ use crate::consts::COMMITMENT_PREFIX;
 use crate::convert_byte32_to_hex;
 use crate::get_channel_id_str;
 use crate::Bytes;
+use crate::proto;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -79,6 +80,16 @@ impl_enum_rlp!(
     },
     u8
 );
+
+impl From<Ordering> for proto::channel::Order {
+    fn from(value: Ordering) -> Self {
+        match value {
+            Ordering::Ordered => Self::Ordered,
+            Ordering::Unknown => Self::NoneUnspecified,
+            Ordering::Unordered => Self::Unordered,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct ConnectionCounterparty {
@@ -186,13 +197,4 @@ impl Default for ConnectionEnd {
             versions: Default::default(),
         }
     }
-}
-
-#[derive(RlpEncodable, RlpDecodable)]
-pub struct ChannelEnd {
-    pub state: State,
-    pub ordering: Ordering,
-    pub remote: ChannelCounterparty,
-    pub connection_hops: Vec<String>,
-    // pub version: CString,
 }

@@ -2,6 +2,7 @@ use alloc::string::String;
 
 use crate::consts;
 use crate::handler::*;
+use crate::object::ChannelCounterparty;
 use crate::object::ConnectionCounterparty;
 use crate::object::ConnectionEnd;
 use crate::object::Packet;

@@ -1,7 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
 use alloc::string::ToString;
-use alloc::vec::Vec;
 use prost::Message;
 use rlp::decode;
 
@@ -12,7 +11,7 @@ use crate::message::{
     MsgConnectionOpenTry, MsgConsumeAckPacket, MsgRecvPacket, MsgSendPacket, MsgType,
     MsgWriteAckPacket,
 };
-use crate::object::{ChannelCounterparty, ChannelEnd, Ordering, State, VerifyError};
+use crate::object::{Ordering, State, VerifyError};
 use crate::proto::client::Height;
 use crate::{commitment::*, proto};
 use crate::{
@@ -357,7 +356,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
     client: C,
     ibc_connections: &IbcConnections,
     new: IbcChannel,
-    _msg: MsgChannelOpenTry,
+    msg: MsgChannelOpenTry,
 ) -> Result<(), VerifyError> {
     if new.connection_hops.is_empty() {
         return Err(VerifyError::ConnectionsWrong);
@@ -380,18 +379,44 @@ pub fn handle_msg_channel_open_try<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
-    let _object = ChannelEnd {
-        state: State::Init,
-        ordering: new.order,
-        remote: ChannelCounterparty {
+    let expected = proto::channel::Channel {
+        state: proto::channel::State::Init as i32,
+        ordering: proto::channel::Order::from(new.order) as i32,
+        // TODO.
+        connection_hops: vec![],
+        version: "TODO".into(),
+        counterparty: Some(proto::channel::Counterparty {
+            channel_id: "".into(),
             port_id: new.port_id,
-            channel_id: new.number.to_string(),
-        },
-        connection_hops: Vec::new(),
+        }),
     };
 
-    // TODO: verify proof.
+    verify_channel_state(
+        &client,
+        msg.proof_height,
+        &msg.proof_init[..],
+        &new.counterparty.port_id,
+        &new.counterparty.channel_id,
+        &expected,
+    )?;
+
     Ok(())
+}
+
+fn verify_channel_state(
+    client: &impl Client,
+    proof_height: Height,
+    proof: &[u8],
+    port_id: &str,
+    channel_id: &str,
+    expected: &proto::channel::Channel,
+) -> Result<(), VerifyError> {
+    client.verify_membership(
+        proof_height,
+        proof,
+        channel_path(port_id, channel_id).as_bytes(),
+        &expected.encode_to_vec(),
+    )
 }
 
 pub fn handle_channel_open_ack_and_confirm<C: Client>(
@@ -426,10 +451,10 @@ pub fn handle_channel_open_ack_and_confirm<C: Client>(
 }
 
 pub fn handle_msg_channel_open_ack<C: Client>(
-    _client: C,
+    client: C,
     old: IbcChannel,
     new: IbcChannel,
-    _msg: MsgChannelOpenAck,
+    msg: MsgChannelOpenAck,
 ) -> Result<(), VerifyError> {
     if !new.equal_unless_state_and_counterparty(&old) {
         return Err(VerifyError::WrongChannel);
@@ -443,25 +468,35 @@ pub fn handle_msg_channel_open_ack<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
-    let _object = ChannelEnd {
-        state: State::OpenTry,
-        ordering: new.order,
-        remote: ChannelCounterparty {
-            port_id: new.counterparty.port_id,
-            channel_id: new.counterparty.channel_id,
-        },
-        connection_hops: Vec::new(),
+    let expected = proto::channel::Channel {
+        state: proto::channel::State::Tryopen as i32,
+        ordering: proto::channel::Order::from(new.order) as i32,
+        // TODO.
+        connection_hops: vec![],
+        version: "TODO".into(),
+        counterparty: Some(proto::channel::Counterparty {
+            channel_id: get_channel_id_str(new.number),
+            port_id: new.port_id,
+        }),
     };
 
-    // TODO: verify proof.
+    verify_channel_state(
+        &client,
+        msg.proof_height,
+        &msg.proof_try,
+        &new.counterparty.port_id,
+        &new.counterparty.channel_id,
+        &expected,
+    )?;
+
     Ok(())
 }
 
 pub fn handle_msg_channel_open_confirm<C: Client>(
-    _client: C,
+    client: C,
     old: IbcChannel,
     new: IbcChannel,
-    _msg: MsgChannelOpenConfirm,
+    msg: MsgChannelOpenConfirm,
 ) -> Result<(), VerifyError> {
     if !new.equal_unless_state_and_counterparty(&old) {
         return Err(VerifyError::WrongChannel);
@@ -470,17 +505,27 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
-    let _object = ChannelEnd {
-        state: State::Open,
-        ordering: new.order,
-        remote: ChannelCounterparty {
-            port_id: new.counterparty.port_id,
-            channel_id: new.counterparty.channel_id,
-        },
-        connection_hops: Vec::new(),
+    let expected = proto::channel::Channel {
+        state: proto::channel::State::Open as i32,
+        ordering: proto::channel::Order::from(new.order) as i32,
+        // TODO.
+        connection_hops: vec![],
+        version: "TODO".into(),
+        counterparty: Some(proto::channel::Counterparty {
+            channel_id: get_channel_id_str(new.number),
+            port_id: new.port_id,
+        }),
     };
 
-    // TODO: verify proof.
+    verify_channel_state(
+        &client,
+        msg.proof_height,
+        &msg.proof_ack,
+        &new.counterparty.port_id,
+        &new.counterparty.channel_id,
+        &expected,
+    )?;
+
     Ok(())
 }
 
@@ -554,23 +599,10 @@ pub fn handle_msg_recv_packet<C: Client>(
     packet_args: PacketArgs,
     msg: MsgRecvPacket,
 ) -> Result<(), VerifyError> {
-    // TODO: use Axon proof to check this useless ibc_packet is INDEED useless
+    // A write_ack packet can be consumed.
     if let Some(ibc_packed) = useless_ibc_packet {
         if ibc_packed.status != PacketStatus::WriteAck {
             return Err(VerifyError::WrongUnusedPacket);
-        }
-        if old_channel.order == Ordering::Ordered
-            && ibc_packed.packet.sequence >= old_channel.sequence.next_sequence_recvs
-        {
-            return Err(VerifyError::WrongUnusedPacketOrder);
-        }
-        if old_channel.order == Ordering::Unordered
-            && !old_channel
-                .sequence
-                .received_sequences
-                .contains(&ibc_packed.packet.sequence)
-        {
-            return Err(VerifyError::WrongUnusedPacketUnorder);
         }
     }
 
