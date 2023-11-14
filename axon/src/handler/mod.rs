@@ -11,7 +11,7 @@ use crate::message::{
     MsgConnectionOpenTry, MsgConsumeAckPacket, MsgRecvPacket, MsgSendPacket, MsgType,
     MsgWriteAckPacket,
 };
-use crate::object::{ConnectionEnd, Ordering, State, VerifyError};
+use crate::object::{ConnectionEnd, Ordering, State, VerifyError, Version};
 use crate::proto::client::Height;
 use crate::{commitment::*, proto};
 use crate::{
@@ -43,6 +43,14 @@ pub fn handle_msg_connection_open_init<C: Client>(
         .last()
         .ok_or(VerifyError::WrongConnectionState)?;
 
+    if !new.counterparty.connection_id.is_empty() {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    if new.versions != [Version::version_1()] {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
     old_connections.connections.push(ConnectionEnd {
         state: State::Init,
         client_id: convert_byte32_to_hex(client.client_id()),
@@ -60,38 +68,34 @@ pub fn handle_msg_connection_open_init<C: Client>(
 
 pub fn handle_msg_connection_open_try<C: Client>(
     client: C,
-    old_connections: IbcConnections,
+    mut old_connections: IbcConnections,
     old_args: ConnectionArgs,
     new_connections: IbcConnections,
     new_args: ConnectionArgs,
     msg: MsgConnectionOpenTry,
 ) -> Result<(), VerifyError> {
-    if old_connections.connections.len() + 1 != new_connections.connections.len() {
-        return Err(VerifyError::WrongConnectionCnt);
-    }
-
     if old_args != new_args || old_args.client_id.as_slice() != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
-    for i in 0..old_connections.connections.len() {
-        if old_connections.connections[i] != new_connections.connections[i] {
-            return Err(VerifyError::ConnectionsWrong);
-        }
-    }
-
-    let connection = new_connections.connections.last().unwrap();
-    if &convert_hex_to_client_id(&connection.client_id)? != client.client_id()
-        || connection.counterparty.connection_id.is_none()
-    {
-        return Err(VerifyError::WrongClient);
-    }
-
-    if connection.state != State::OpenTry {
-        return Err(VerifyError::WrongConnectionState);
-    }
+    let connection = new_connections
+        .connections
+        .last()
+        .ok_or(VerifyError::WrongConnectionState)?;
 
     let counterparty = &connection.counterparty;
+
+    old_connections.connections.push(ConnectionEnd {
+        state: State::OpenTry,
+        client_id: convert_byte32_to_hex(client.client_id()),
+        counterparty: counterparty.clone(),
+        versions: vec![Version::version_1()],
+        delay_period: connection.delay_period,
+    });
+
+    if old_connections != new_connections {
+        return Err(VerifyError::WrongConnectionState);
+    }
 
     let expected_connection_end_on_counterparty = proto::connection::ConnectionEnd {
         state: proto::connection::State::Init as _,
@@ -104,15 +108,14 @@ pub fn handle_msg_connection_open_try<C: Client>(
             }),
         }),
         delay_period: connection.delay_period,
-        // XXX: should be msg_.counterpartyVersions
-        versions: vec![Default::default()],
+        versions: vec![Version::version_1().into()],
     };
 
     verify_connection_state(
         &client,
         msg.proof_height,
         &msg.proof_init,
-        counterparty.connection_id.as_deref().unwrap(),
+        &counterparty.connection_id,
         &expected_connection_end_on_counterparty,
     )?;
 
@@ -137,45 +140,30 @@ fn verify_connection_state(
 
 pub fn handle_msg_connection_open_ack<C: Client>(
     client: C,
-    old: IbcConnections,
+    mut old: IbcConnections,
     old_args: ConnectionArgs,
     new: IbcConnections,
     new_args: ConnectionArgs,
     msg: MsgConnectionOpenAck,
 ) -> Result<(), VerifyError> {
-    if old.connections.len() != new.connections.len() {
-        return Err(VerifyError::WrongConnectionCnt);
-    }
-
     if old_args != new_args || &old_args.client_id != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
+    // Verify connection state transition.
     let conn_idx = msg.conn_id_on_a;
-    for i in 0..old.connections.len() {
-        if i != conn_idx && old.connections[i] != new.connections[i] {
-            return Err(VerifyError::WrongClient);
-        }
-    }
-
-    let old_connection = &old.connections[conn_idx];
+    let old_connection = &mut old.connections[conn_idx];
     let new_connection = &new.connections[conn_idx];
-
-    if old_connection.client_id != new_connection.client_id
-        || old_connection.delay_period != new_connection.delay_period
-        || old_connection.counterparty.client_id != new_connection.counterparty.client_id
-    {
-        return Err(VerifyError::WrongClient);
+    if old_connection.state != State::Init {
+        return Err(VerifyError::WrongConnectionState);
     }
-
-    if new_connection.counterparty.connection_id.is_none() {
-        return Err(VerifyError::ConnectionsWrong);
-    }
-
-    if old_connection.state != State::Init || new_connection.state != State::Open {
+    old_connection.state = State::Open;
+    old_connection.counterparty.connection_id = new_connection.counterparty.connection_id.clone();
+    if old != new {
         return Err(VerifyError::WrongConnectionState);
     }
 
+    // Verify counterparty connection state.
     let expected = proto::connection::ConnectionEnd {
         state: proto::connection::State::Tryopen as _,
         client_id: new_connection.counterparty.client_id.clone(),
@@ -187,19 +175,13 @@ pub fn handle_msg_connection_open_ack<C: Client>(
             }),
         }),
         delay_period: new_connection.delay_period,
-        // XXX
-        versions: vec![Default::default()],
+        versions: vec![Version::version_1().into()],
     };
-
     verify_connection_state(
         &client,
         msg.proof_height,
         &msg.proof_try,
-        new_connection
-            .counterparty
-            .connection_id
-            .as_deref()
-            .unwrap(),
+        &new_connection.counterparty.connection_id,
         &expected,
     )?;
 
@@ -209,39 +191,29 @@ pub fn handle_msg_connection_open_ack<C: Client>(
 
 pub fn handle_msg_connection_open_confirm<C: Client>(
     client: C,
-    old: IbcConnections,
+    mut old: IbcConnections,
     old_args: ConnectionArgs,
     new: IbcConnections,
     new_args: ConnectionArgs,
     msg: MsgConnectionOpenConfirm,
 ) -> Result<(), VerifyError> {
-    if old.connections.len() != new.connections.len() {
-        return Err(VerifyError::WrongConnectionCnt);
-    }
-
-    let conn_idx = msg.conn_id_on_b;
-    for i in 0..old.connections.len() {
-        if i != conn_idx && old.connections[i] != new.connections[i] {
-            return Err(VerifyError::WrongClient);
-        }
-    }
-
     if old_args != new_args || &old_args.client_id != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
-    let old_connection = &old.connections[conn_idx];
+    // Verify state transition.
+    let conn_idx = msg.conn_id_on_b;
+    let old_connection = &mut old.connections[conn_idx];
     let new_connection = &new.connections[conn_idx];
-
-    if old_connection.client_id != new_connection.client_id
-        || old_connection.delay_period != new_connection.delay_period
-        || old_connection.counterparty != new_connection.counterparty
-    {
-        return Err(VerifyError::WrongClient);
-    }
-    if old_connection.state != State::OpenTry || new_connection.state != State::Open {
+    if old_connection.state != State::OpenTry {
         return Err(VerifyError::WrongConnectionState);
     }
+    old_connection.state = State::Open;
+    if old != new {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    // Verify counterparty state.
     let expected = proto::connection::ConnectionEnd {
         state: proto::connection::State::Open as _,
         client_id: new_connection.counterparty.client_id.clone(),
@@ -253,22 +225,16 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
             }),
         }),
         delay_period: new_connection.delay_period,
-        versions: vec![Default::default()],
+        versions: vec![Version::version_1().into()],
     };
 
     verify_connection_state(
         &client,
         msg.proof_height,
         &msg.proof_ack,
-        new_connection
-            .counterparty
-            .connection_id
-            .as_deref()
-            .unwrap(),
+        &new_connection.counterparty.connection_id,
         &expected,
     )?;
-
-    // TODO: verify client.
 
     Ok(())
 }

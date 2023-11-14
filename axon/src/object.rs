@@ -94,7 +94,7 @@ impl From<Ordering> for proto::channel::Order {
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct ConnectionCounterparty {
     pub client_id: String,
-    pub connection_id: Option<String>,
+    pub connection_id: String,
     pub commitment_prefix: Bytes,
 }
 
@@ -169,11 +169,20 @@ pub struct Version {
     pub features: Vec<String>,
 }
 
-impl Default for Version {
-    fn default() -> Self {
+impl Version {
+    pub fn version_1() -> Self {
         Version {
             identifier: "1".to_string(),
             features: vec!["ORDER_ORDERED".to_owned(), "ORDER_UNORDERED".to_owned()],
+        }
+    }
+}
+
+impl From<Version> for proto::connection::Version {
+    fn from(value: Version) -> Self {
+        Self {
+            features: value.features,
+            identifier: value.identifier,
         }
     }
 }
@@ -194,7 +203,7 @@ impl Default for ConnectionEnd {
             client_id: convert_byte32_to_hex(&[0u8; 32]),
             counterparty: Default::default(),
             delay_period: Default::default(),
-            versions: Default::default(),
+            versions: vec![Version::version_1()],
         }
     }
 }

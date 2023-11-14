@@ -73,7 +73,7 @@ fn test_handle_msg_connection_open_try() {
         client_id: convert_byte32_to_hex(&[0u8; 32]),
         counterparty: ConnectionCounterparty {
             client_id: String::from("dummy"),
-            connection_id: Some(String::from("dummy")),
+            connection_id: "dummy".into(),
             commitment_prefix: COMMITMENT_PREFIX.to_vec(),
         },
         ..Default::default()
@@ -127,7 +127,7 @@ fn test_handle_msg_connection_open_ack() {
     let new_connection_end = ConnectionEnd {
         state: State::Open,
         counterparty: ConnectionCounterparty {
-            connection_id: Some("connection".to_string()),
+            connection_id: "connection".to_string(),
             ..Default::default()
         },
         ..Default::default()
@@ -180,7 +180,7 @@ fn test_handle_msg_connection_open_confirm() {
     let old_connection_end = ConnectionEnd {
         state: State::OpenTry,
         counterparty: ConnectionCounterparty {
-            connection_id: Some("connection-1".into()),
+            connection_id: "connection-1".into(),
             ..Default::default()
         },
         ..Default::default()
@@ -189,7 +189,7 @@ fn test_handle_msg_connection_open_confirm() {
     let new_connection_end = ConnectionEnd {
         state: State::Open,
         counterparty: ConnectionCounterparty {
-            connection_id: Some("connection-1".into()),
+            connection_id: "connection-1".into(),
             ..Default::default()
         },
         ..Default::default()
@@ -239,7 +239,6 @@ fn test_handle_msg_channel_open_init() {
     let new_connections = IbcConnections {
         next_channel_number: 1,
         connections: vec![connection_end],
-        ..Default::default()
     };
 
     let channel = IbcChannel {
@@ -264,7 +263,6 @@ fn test_handle_msg_channel_open_try_success() {
     let new_connections = IbcConnections {
         next_channel_number: 1,
         connections: vec![connection_end],
-        ..Default::default()
     };
 
     let channel = IbcChannel {
