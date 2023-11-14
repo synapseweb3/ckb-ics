@@ -349,7 +349,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
     let expected = proto::channel::Channel {
         state: proto::channel::State::Init as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
-        connection_hops: vec![conn.counterparty.connection_id],
+        connection_hops: vec![conn.counterparty.connection_id.clone()],
         version: "TODO".into(),
         counterparty: Some(proto::channel::Counterparty {
             channel_id: "".into(),
@@ -432,10 +432,6 @@ pub fn handle_msg_channel_open_ack<C: Client>(
         return Err(VerifyError::WrongChannel);
     }
 
-    if old.state != State::Init || new.state != State::Open {
-        return Err(VerifyError::WrongChannelState);
-    }
-
     let expected = proto::channel::Channel {
         state: proto::channel::State::Tryopen as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
@@ -501,7 +497,7 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
 #[allow(clippy::too_many_arguments)]
 pub fn handle_msg_send_packet<C: Client>(
     _: C,
-    old_channel: IbcChannel,
+    mut old_channel: IbcChannel,
     old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
     new_channel_args: ChannelArgs,
@@ -509,7 +505,12 @@ pub fn handle_msg_send_packet<C: Client>(
     packet_args: PacketArgs,
     _: MsgSendPacket,
 ) -> Result<(), VerifyError> {
-    if !old_channel.equal_unless_sequence(&new_channel) {
+    if ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends {
+        return Err(VerifyError::WrongPacketSequence);
+    }
+
+    old_channel.sequence.next_sequence_sends += 1;
+    if old_channel != new_channel {
         return Err(VerifyError::WrongChannel);
     }
 
@@ -530,23 +531,12 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongPacketContent);
     }
 
-    if !old_channel
-        .sequence
-        .next_send_packet_is(&new_channel.sequence)
-    {
-        return Err(VerifyError::WrongChannel);
-    }
-
     if new_channel.state != State::Open {
         return Err(VerifyError::WrongChannelState);
     }
 
     if ibc_packet.status != PacketStatus::Send {
         return Err(VerifyError::WrongPacketStatus);
-    }
-
-    if ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends {
-        return Err(VerifyError::WrongPacketSequence);
     }
 
     if ibc_packet.ack.is_some() {
@@ -559,7 +549,7 @@ pub fn handle_msg_send_packet<C: Client>(
 #[allow(clippy::too_many_arguments)]
 pub fn handle_msg_recv_packet<C: Client>(
     client: C,
-    old_channel: IbcChannel,
+    mut old_channel: IbcChannel,
     old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
     new_channel_args: ChannelArgs,
@@ -575,7 +565,18 @@ pub fn handle_msg_recv_packet<C: Client>(
         }
     }
 
-    if !old_channel.equal_unless_sequence(&new_channel) {
+    if old_channel.order == Ordering::Unordered {
+        old_channel
+            .sequence
+            .unorder_receive(ibc_packet.packet.sequence)?;
+    } else {
+        if old_channel.sequence.next_sequence_recvs != ibc_packet.packet.sequence {
+            return Err(VerifyError::WrongPacketSequence);
+        }
+        old_channel.sequence.next_sequence_recvs += 1;
+    }
+
+    if old_channel != new_channel {
         return Err(VerifyError::WrongChannel);
     }
 
@@ -600,22 +601,6 @@ pub fn handle_msg_recv_packet<C: Client>(
         || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.destination_channel_id
     {
         return Err(VerifyError::WrongPacketArgs);
-    }
-
-    let unorder_sequence = if old_channel.order == Ordering::Unordered {
-        Some(ibc_packet.packet.sequence)
-    } else {
-        if ibc_packet.packet.sequence != old_channel.sequence.next_sequence_recvs {
-            return Err(VerifyError::WrongPacketSequence);
-        }
-        None
-    };
-
-    if !old_channel
-        .sequence
-        .next_recv_packet_is(&new_channel.sequence, unorder_sequence)
-    {
-        return Err(VerifyError::WrongChannelSequence);
     }
 
     client.verify_membership(
@@ -649,23 +634,20 @@ fn sha256(msgs: &[&[u8]]) -> [u8; 32] {
 #[allow(clippy::too_many_arguments)]
 pub fn handle_msg_ack_packet<C: Client>(
     client: C,
-    old_channel: IbcChannel,
+    mut old_channel: IbcChannel,
     old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
     new_channel_args: ChannelArgs,
-    old_ibc_packet: IbcPacket,
+    mut old_ibc_packet: IbcPacket,
     old_packet_args: PacketArgs,
     new_ibc_packet: IbcPacket,
     new_packet_args: PacketArgs,
     msg: MsgAckPacket,
 ) -> Result<(), VerifyError> {
-    if !old_channel.equal_unless_sequence(&new_channel) {
-        return Err(VerifyError::WrongChannel);
-    }
-
-    if old_ibc_packet.status != PacketStatus::Send && new_ibc_packet.status != PacketStatus::Ack {
+    if old_ibc_packet.status != PacketStatus::Send {
         return Err(VerifyError::WrongPacketStatus);
     }
+    old_ibc_packet.status = PacketStatus::Ack;
 
     if old_channel_args != new_channel_args {
         return Err(VerifyError::WrongChannelArgs);
@@ -675,31 +657,24 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongPacketArgs);
     }
 
-    if !old_ibc_packet
-        .packet
-        .equal_unless_sequence(&new_ibc_packet.packet)
-    {
+    if old_ibc_packet.ack.is_some() || new_ibc_packet.ack.is_none() {
+        return Err(VerifyError::WrongPacketAck);
+    }
+    old_ibc_packet.ack = new_ibc_packet.ack.clone();
+
+    if old_ibc_packet != new_ibc_packet {
         return Err(VerifyError::WrongPacketContent);
     }
 
-    let is_unorder = if old_channel.order == Ordering::Unordered {
-        true
-    } else {
+    if old_channel.order != Ordering::Unordered {
         if new_ibc_packet.packet.sequence != old_channel.sequence.next_sequence_acks {
             return Err(VerifyError::WrongPacketSequence);
         }
-        false
-    };
-
-    if !old_channel
-        .sequence
-        .next_recv_ack_is(&new_channel.sequence, is_unorder)
-    {
-        return Err(VerifyError::WrongChannelSequence);
+        old_channel.sequence.next_sequence_acks += 1;
     }
 
-    if old_ibc_packet.ack.is_some() || new_ibc_packet.ack.is_none() {
-        return Err(VerifyError::WrongPacketAck);
+    if old_channel != new_channel {
+        return Err(VerifyError::WrongChannel);
     }
 
     client.verify_membership(

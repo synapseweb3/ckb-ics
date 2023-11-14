@@ -473,6 +473,7 @@ fn test_handle_msg_send_packet_success() {
         packet: Packet {
             destination_channel_id: old_channel.counterparty.channel_id.clone(),
             destination_port_id: old_channel.counterparty.port_id.clone(),
+            sequence: 1,
             ..Default::default()
         },
         tx_hash: None,
@@ -482,7 +483,10 @@ fn test_handle_msg_send_packet_success() {
 
     let old_channel_args = ChannelArgs::default();
     let new_channel_args = ChannelArgs::default();
-    let packet_args = PacketArgs::default();
+    let packet_args = PacketArgs {
+        sequence: 1,
+        ..Default::default()
+    };
 
     handle_msg_send_packet(
         client,
@@ -516,14 +520,20 @@ fn test_msg_recv_packet_success() {
     };
 
     let ibc_packet = IbcPacket {
-        packet: Packet::default(),
+        packet: Packet {
+            sequence: 1,
+            ..Packet::default()
+        },
         tx_hash: None,
         status: PacketStatus::Recv,
         ack: None,
     };
     let old_channel_args = ChannelArgs::default();
     let new_channel_args = ChannelArgs::default();
-    let packet_args = PacketArgs::default();
+    let packet_args = PacketArgs {
+        sequence: 1,
+        ..Default::default()
+    };
 
     handle_msg_recv_packet(
         TestClient::default(),
