@@ -11,7 +11,7 @@ use crate::message::{
     MsgConnectionOpenTry, MsgConsumeAckPacket, MsgRecvPacket, MsgSendPacket, MsgType,
     MsgWriteAckPacket,
 };
-use crate::object::{Ordering, State, VerifyError};
+use crate::object::{ConnectionEnd, Ordering, State, VerifyError};
 use crate::proto::client::Height;
 use crate::{commitment::*, proto};
 use crate::{
@@ -28,34 +28,30 @@ pub use objects::*;
 
 pub fn handle_msg_connection_open_init<C: Client>(
     client: C,
-    old_connections: IbcConnections,
+    mut old_connections: IbcConnections,
     old_args: ConnectionArgs,
     new_connections: IbcConnections,
     new_args: ConnectionArgs,
     _: MsgConnectionOpenInit,
 ) -> Result<(), VerifyError> {
-    if old_connections.connections.len() + 1 != new_connections.connections.len()
-        || old_connections.next_connection_number + 1 != new_connections.next_connection_number
-    {
-        return Err(VerifyError::WrongConnectionCnt);
-    }
-
     if old_args != new_args || old_args.client_id.as_slice() != client.client_id() {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
-    for i in 0..old_connections.connections.len() {
-        if old_connections.connections[i] != new_connections.connections[i] {
-            return Err(VerifyError::ConnectionsWrong);
-        }
-    }
+    let new = new_connections
+        .connections
+        .last()
+        .ok_or(VerifyError::WrongConnectionState)?;
 
-    let connection = new_connections.connections.last().unwrap();
-    if &convert_hex_to_client_id(&connection.client_id)? != client.client_id() {
-        return Err(VerifyError::WrongClient);
-    }
+    old_connections.connections.push(ConnectionEnd {
+        state: State::Init,
+        client_id: convert_byte32_to_hex(client.client_id()),
+        counterparty: new.counterparty.clone(),
+        versions: new.versions.clone(),
+        delay_period: new.delay_period,
+    });
 
-    if connection.state != State::Init {
+    if old_connections != new_connections {
         return Err(VerifyError::WrongConnectionState);
     }
 
@@ -70,9 +66,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
     new_args: ConnectionArgs,
     msg: MsgConnectionOpenTry,
 ) -> Result<(), VerifyError> {
-    if old_connections.connections.len() + 1 != new_connections.connections.len()
-        || old_connections.next_connection_number + 1 != new_connections.next_connection_number
-    {
+    if old_connections.connections.len() + 1 != new_connections.connections.len() {
         return Err(VerifyError::WrongConnectionCnt);
     }
 

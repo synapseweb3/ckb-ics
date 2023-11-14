@@ -45,7 +45,6 @@ fn test_handle_msg_connection_open_init() {
 
     let old_connections = IbcConnections::default();
     let new_connections = IbcConnections {
-        next_connection_number: 1,
         connections: vec![new_connection_end],
         ..Default::default()
     };
@@ -82,7 +81,6 @@ fn test_handle_msg_connection_open_try() {
 
     let old_connections = IbcConnections::default();
     let new_connections = IbcConnections {
-        next_connection_number: 1,
         connections: vec![new_connection_end],
         ..Default::default()
     };

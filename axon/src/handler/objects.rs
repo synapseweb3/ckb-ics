@@ -7,10 +7,8 @@ use crate::convert_byte32_to_hex;
 use crate::object::{ChannelCounterparty, ConnectionEnd, Ordering, Packet, State, VerifyError};
 use crate::proto::client::Height;
 
-#[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
+#[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable, PartialEq, Eq)]
 pub struct IbcConnections {
-    // TODO: can this be removed?
-    pub next_connection_number: u16,
     pub next_channel_number: u16,
     pub connections: Vec<ConnectionEnd>,
 }
