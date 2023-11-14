@@ -6,10 +6,10 @@ use rlp::decode;
 
 use crate::consts::COMMITMENT_PREFIX;
 use crate::message::{
-    Envelope, MsgAckPacket, MsgChannelOpenAck, MsgChannelOpenConfirm, MsgChannelOpenInit,
-    MsgChannelOpenTry, MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
-    MsgConnectionOpenTry, MsgConsumeAckPacket, MsgRecvPacket, MsgSendPacket, MsgType,
-    MsgWriteAckPacket,
+    Envelope, MsgAckPacket, MsgChannelCloseConfirm, MsgChannelCloseInit, MsgChannelOpenAck,
+    MsgChannelOpenConfirm, MsgChannelOpenInit, MsgChannelOpenTry, MsgConnectionOpenAck,
+    MsgConnectionOpenConfirm, MsgConnectionOpenInit, MsgConnectionOpenTry, MsgConsumeAckPacket,
+    MsgRecvPacket, MsgSendPacket, MsgType, MsgWriteAckPacket,
 };
 use crate::object::{
     ChannelCounterparty, ChannelEnd, ConnectionCounterparty, ConnectionEnd, Ordering, PacketAck,
@@ -220,7 +220,6 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     client.verify_object(expected, msg.proofs.object_proof)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_channel_open_init_and_try<C: Client>(
     client: C,
     channel: IbcChannel,
@@ -421,7 +420,57 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
     client.verify_object(object, msg.proofs.object_proof)
 }
 
-#[allow(clippy::too_many_arguments)]
+pub fn handle_msg_channel_close_init<C: Client>(
+    _: C,
+    old: IbcChannel,
+    old_args: ChannelArgs,
+    new: IbcChannel,
+    new_args: ChannelArgs,
+    _: MsgChannelCloseInit,
+) -> Result<(), VerifyError> {
+    if !new.equal_unless_state(&old) {
+        return Err(VerifyError::WrongChannel);
+    }
+    if old.state != State::Open || new.state != State::Closed {
+        return Err(VerifyError::WrongChannelState);
+    }
+    if old_args.open != true || new_args.open != false {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+    Ok(())
+}
+
+pub fn handle_msg_channel_close_confirm<C: Client>(
+    mut client: C,
+    old: IbcChannel,
+    old_args: ChannelArgs,
+    new: IbcChannel,
+    new_args: ChannelArgs,
+    msg: MsgChannelCloseConfirm,
+) -> Result<(), VerifyError> {
+    if !new.equal_unless_state(&old) {
+        return Err(VerifyError::WrongChannel);
+    }
+    if old.state != State::Open || new.state != State::Closed {
+        return Err(VerifyError::WrongChannelState);
+    }
+    if old_args.open != true || new_args.open != false {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    let object = ChannelEnd {
+        state: State::Closed,
+        ordering: new.order,
+        remote: ChannelCounterparty {
+            port_id: new.counterparty.port_id,
+            channel_id: new.counterparty.channel_id,
+        },
+        connection_hops: Vec::new(),
+    };
+
+    client.verify_object(object, msg.proofs.object_proof)
+}
+
 pub fn handle_msg_send_packet<C: Client>(
     _: C,
     old_channel: IbcChannel,
@@ -479,7 +528,6 @@ pub fn handle_msg_send_packet<C: Client>(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_msg_recv_packet<C: Client>(
     mut client: C,
     old_channel: IbcChannel,
@@ -492,12 +540,12 @@ pub fn handle_msg_recv_packet<C: Client>(
     msg: MsgRecvPacket,
 ) -> Result<(), VerifyError> {
     // TODO: use Axon proof to check this useless ibc_packet is INDEED useless
-    if let Some(ibc_packed) = useless_ibc_packet {
-        if ibc_packed.status != PacketStatus::WriteAck {
+    if let Some(useless) = useless_ibc_packet {
+        if useless.status != PacketStatus::WriteAck {
             return Err(VerifyError::WrongUnusedPacket);
         }
         if old_channel.order == Ordering::Ordered
-            && ibc_packed.packet.sequence >= old_channel.sequence.next_sequence_recvs
+            && useless.packet.sequence >= old_channel.sequence.next_sequence_recvs
         {
             return Err(VerifyError::WrongUnusedPacketOrder);
         }
@@ -505,7 +553,7 @@ pub fn handle_msg_recv_packet<C: Client>(
             && !old_channel
                 .sequence
                 .received_sequences
-                .contains(&ibc_packed.packet.sequence)
+                .contains(&useless.packet.sequence)
         {
             return Err(VerifyError::WrongUnusedPacketUnorder);
         }
@@ -557,7 +605,6 @@ pub fn handle_msg_recv_packet<C: Client>(
     client.verify_object(ibc_packet.packet, msg.proofs.object_proof)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_msg_ack_packet<C: Client>(
     mut client: C,
     old_channel: IbcChannel,
