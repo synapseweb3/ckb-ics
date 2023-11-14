@@ -434,7 +434,7 @@ pub fn handle_msg_channel_close_init<C: Client>(
     if old.state != State::Open || new.state != State::Closed {
         return Err(VerifyError::WrongChannelState);
     }
-    if old_args.open != true || new_args.open != false {
+    if !old_args.open || new_args.open {
         return Err(VerifyError::WrongChannelArgs);
     }
     Ok(())
@@ -454,7 +454,7 @@ pub fn handle_msg_channel_close_confirm<C: Client>(
     if old.state != State::Open || new.state != State::Closed {
         return Err(VerifyError::WrongChannelState);
     }
-    if old_args.open != true || new_args.open != false {
+    if !old_args.open || new_args.open {
         return Err(VerifyError::WrongChannelArgs);
     }
 
