@@ -245,14 +245,19 @@ pub fn handle_channel_open_init_and_try<C: Client>(
     channel: IbcChannel,
     channel_args: ChannelArgs,
     envelop: Envelope,
-    old_connections: IbcConnections,
+    mut old_connections: IbcConnections,
     old_connection_args: ConnectionArgs,
     new_connections: IbcConnections,
     new_connection_args: ConnectionArgs,
 ) -> Result<(), VerifyError> {
-    if old_connections.next_channel_number + 1 != new_connections.next_channel_number {
-        return Err(VerifyError::WrongConnectionNextChannelNumber);
+    if channel.number != old_connections.next_channel_number {
+        return Err(VerifyError::WrongChannel);
     }
+    old_connections.next_channel_number += 1;
+    if old_connections != new_connections {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
     if old_connection_args != new_connection_args
         || &old_connection_args.client_id != client.client_id()
     {
@@ -288,7 +293,7 @@ pub fn handle_msg_channel_open_init<C: Client>(
     new: IbcChannel,
     _msg: MsgChannelOpenInit,
 ) -> Result<(), VerifyError> {
-    if new.connection_hops.is_empty() {
+    if new.connection_hops.len() != 1 {
         return Err(VerifyError::ConnectionsWrong);
     }
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
@@ -305,9 +310,11 @@ pub fn handle_msg_channel_open_init<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
-    if new.state != State::Init {
+    if new.state != State::Init || !new.counterparty.channel_id.is_empty() {
         return Err(VerifyError::WrongChannelState);
     }
+
+    // TODO: check sequence.
 
     Ok(())
 }
@@ -318,7 +325,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
     new: IbcChannel,
     msg: MsgChannelOpenTry,
 ) -> Result<(), VerifyError> {
-    if new.connection_hops.is_empty() {
+    if new.connection_hops.len() != 1 {
         return Err(VerifyError::ConnectionsWrong);
     }
     let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
@@ -342,8 +349,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
     let expected = proto::channel::Channel {
         state: proto::channel::State::Init as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
-        // TODO.
-        connection_hops: vec![],
+        connection_hops: vec![conn.counterparty.connection_id],
         version: "TODO".into(),
         counterparty: Some(proto::channel::Counterparty {
             channel_id: "".into(),
@@ -412,15 +418,17 @@ pub fn handle_channel_open_ack_and_confirm<C: Client>(
 
 pub fn handle_msg_channel_open_ack<C: Client>(
     client: C,
-    old: IbcChannel,
+    mut old: IbcChannel,
     new: IbcChannel,
     msg: MsgChannelOpenAck,
 ) -> Result<(), VerifyError> {
-    if !new.equal_unless_state_and_counterparty(&old) {
-        return Err(VerifyError::WrongChannel);
+    if old.state != State::Init {
+        return Err(VerifyError::WrongChannelState);
     }
-
-    if new.counterparty.channel_id.is_empty() || new.counterparty.port_id.is_empty() {
+    old.state = State::Open;
+    // TODO: old.version = new.version
+    old.counterparty.channel_id = new.counterparty.channel_id.clone();
+    if old != new {
         return Err(VerifyError::WrongChannel);
     }
 
@@ -431,7 +439,7 @@ pub fn handle_msg_channel_open_ack<C: Client>(
     let expected = proto::channel::Channel {
         state: proto::channel::State::Tryopen as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
-        // TODO.
+        // TODO: connections[new.connection_hops[0]].counterparty.connection_id
         connection_hops: vec![],
         version: "TODO".into(),
         counterparty: Some(proto::channel::Counterparty {
@@ -454,21 +462,22 @@ pub fn handle_msg_channel_open_ack<C: Client>(
 
 pub fn handle_msg_channel_open_confirm<C: Client>(
     client: C,
-    old: IbcChannel,
+    mut old: IbcChannel,
     new: IbcChannel,
     msg: MsgChannelOpenConfirm,
 ) -> Result<(), VerifyError> {
-    if !new.equal_unless_state_and_counterparty(&old) {
-        return Err(VerifyError::WrongChannel);
-    }
-    if old.state != State::OpenTry || new.state != State::Open {
+    if old.state != State::OpenTry {
         return Err(VerifyError::WrongChannelState);
+    }
+    old.state = State::Open;
+    if old != new {
+        return Err(VerifyError::WrongChannel);
     }
 
     let expected = proto::channel::Channel {
         state: proto::channel::State::Open as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
-        // TODO.
+        // TODO: connections[new.connection_hops[0]].counterparty.connection_id
         connection_hops: vec![],
         version: "TODO".into(),
         counterparty: Some(proto::channel::Counterparty {

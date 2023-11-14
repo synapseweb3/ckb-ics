@@ -42,11 +42,6 @@ impl Default for IbcChannel {
 }
 
 impl IbcChannel {
-    pub fn equal_unless_state_and_counterparty(&self, other: &Self) -> bool {
-        (self.number, &self.port_id, self.order, &self.sequence)
-            == (other.number, &other.port_id, other.order, &other.sequence)
-    }
-
     pub fn equal_unless_sequence(&self, other: &Self) -> bool {
         (
             self.number,

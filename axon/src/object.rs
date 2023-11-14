@@ -1,8 +1,8 @@
 use crate::consts::COMMITMENT_PREFIX;
 use crate::convert_byte32_to_hex;
 use crate::get_channel_id_str;
-use crate::Bytes;
 use crate::proto;
+use crate::Bytes;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -138,28 +138,6 @@ impl Default for Packet {
             timeout_height: 0,
             timeout_timestamp: 0,
         }
-    }
-}
-
-impl Packet {
-    pub fn equal_unless_sequence(&self, other: &Self) -> bool {
-        (
-            &self.source_port_id,
-            &self.source_channel_id,
-            &self.destination_port_id,
-            &self.destination_channel_id,
-            &self.data,
-            self.timeout_height,
-            self.timeout_timestamp,
-        ) == (
-            &other.source_port_id,
-            &other.source_channel_id,
-            &other.destination_port_id,
-            &other.destination_channel_id,
-            &other.data,
-            other.timeout_height,
-            other.timeout_timestamp,
-        )
     }
 }
 
