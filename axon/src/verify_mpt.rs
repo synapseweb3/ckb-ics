@@ -32,7 +32,11 @@ pub fn keccak256(slice: &[u8]) -> [u8; 32] {
     output
 }
 
-pub fn verify_proof(proof: &[Vec<u8>], root: &[u8], path: &[u8], value: &[u8]) -> bool {
+/// Verify MPT proof.
+///
+/// There's some limitations to this function: it won't handle “inner nodes” or
+/// values at branch node. But it should work for state and storage tries.
+pub fn verify_mpt(proof: &[Vec<u8>], root: &[u8], path: &[u8], value: &[u8]) -> bool {
     let mut expected_hash = root.to_owned();
     let mut path_offset = 0;
 
@@ -45,6 +49,8 @@ pub fn verify_proof(proof: &[Vec<u8>], root: &[u8], path: &[u8], value: &[u8]) -
 
         if node_list.len() == 17 {
             if i == proof.len() - 1 {
+                // Limitation: branch value not handled.
+
                 let nibble = get_nibble(path, path_offset);
                 let node = &node_list[nibble as usize];
 
@@ -54,6 +60,8 @@ pub fn verify_proof(proof: &[Vec<u8>], root: &[u8], path: &[u8], value: &[u8]) -
             } else {
                 let nibble = get_nibble(path, path_offset);
                 expected_hash = node_list[nibble as usize].clone();
+
+                // Limitation: the case that node_list[nibble] is already a node is not handled.
 
                 path_offset += 1;
             }
@@ -65,6 +73,7 @@ pub fn verify_proof(proof: &[Vec<u8>], root: &[u8], path: &[u8], value: &[u8]) -
                     return true;
                 }
 
+                // will use extension node value as value?
                 if node_list[1] == value {
                     return paths_match(
                         &node_list[0],
@@ -157,4 +166,39 @@ fn is_empty_value(value: &[u8]) -> bool {
     let is_empty_slot = value.len() == 1 && value[0] == 0x80;
     let is_empty_account = value == EMPTY_ACCOUNT;
     is_empty_slot || is_empty_account
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_verify_mpt() {
+        use std::sync::Arc;
+
+        use hasher::HasherKeccak;
+
+        use cita_trie::MemoryDB;
+        use cita_trie::{PatriciaTrie, Trie};
+
+        let memdb = Arc::new(MemoryDB::new(false));
+        let hasher = Arc::new(HasherKeccak::new());
+
+        let key = super::keccak256(b"test-key").to_vec();
+        let value = super::keccak256(b"test-value").to_vec();
+
+        let key1 = vec![0xff, 32];
+        let value1 = super::keccak256(b"test-value1").to_vec();
+
+        let mut trie = PatriciaTrie::new(Arc::clone(&memdb), Arc::clone(&hasher));
+        trie.insert(key.clone(), value.clone()).unwrap();
+        let root = trie.root().unwrap();
+
+        let proof = trie.get_proof(&key).unwrap();
+        assert!(super::verify_mpt(&proof, &root, &key, &value));
+
+        trie.insert(key1.clone(), value1.clone()).unwrap();
+        let root = trie.root().unwrap();
+
+        let proof = trie.get_proof(&key1).unwrap();
+        assert!(super::verify_mpt(&proof, &root, &key1, &value1,));
+    }
 }

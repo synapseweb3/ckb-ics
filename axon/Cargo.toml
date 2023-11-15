@@ -15,3 +15,8 @@ prost = { version = "0.12.1", default-features = false, features = ["prost-deriv
 
 [build-dependencies]
 prost-build = "0.12.1"
+
+[dev-dependencies]
+cita_trie = "5.0.1"
+hasher = { version = "0.1.4", features = ["hash-keccak"] }
+hex = "0.4.3"
