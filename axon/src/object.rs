@@ -112,6 +112,7 @@ impl Default for ConnectionCounterparty {
 pub struct ChannelCounterparty {
     pub port_id: String,
     pub channel_id: String,
+    pub connection_id: String,
 }
 
 #[derive(Clone, PartialEq, Eq, RlpEncodable, RlpDecodable, Debug)]

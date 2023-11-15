@@ -313,7 +313,13 @@ pub fn handle_msg_channel_open_init<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
-    // TODO: check sequence.
+    if new.sequence != Sequence::default() {
+        return Err(VerifyError::WrongPacketSequence);
+    }
+
+    if new.counterparty.connection_id != conn.counterparty.connection_id {
+        return Err(VerifyError::WrongConnectionCounterparty);
+    }
 
     Ok(())
 }
@@ -345,11 +351,21 @@ pub fn handle_msg_channel_open_try<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
 
+    if new.sequence != Sequence::default() {
+        return Err(VerifyError::WrongPacketSequence);
+    }
+
+    if new.counterparty.connection_id != conn.counterparty.connection_id {
+        return Err(VerifyError::WrongConnectionCounterparty);
+    }
+
     let expected = proto::channel::Channel {
         state: proto::channel::State::Init as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
         connection_hops: vec![conn.counterparty.connection_id.clone()],
-        version: "TODO".into(),
+        // We don't have version negotiation, so we assume that new channel
+        // version is counterparty version.
+        version: new.version,
         counterparty: Some(proto::channel::Counterparty {
             channel_id: "".into(),
             port_id: new.port_id,
@@ -425,7 +441,9 @@ pub fn handle_msg_channel_open_ack<C: Client>(
         return Err(VerifyError::WrongChannelState);
     }
     old.state = State::Open;
-    // TODO: old.version = new.version
+    // We don't have version negotiation, so we'll just accept counterparty
+    // version.
+    old.version = new.version.clone();
     old.counterparty.channel_id = new.counterparty.channel_id.clone();
     if old != new {
         return Err(VerifyError::WrongChannel);
@@ -434,9 +452,8 @@ pub fn handle_msg_channel_open_ack<C: Client>(
     let expected = proto::channel::Channel {
         state: proto::channel::State::Tryopen as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
-        // TODO: connections[new.connection_hops[0]].counterparty.connection_id
-        connection_hops: vec![],
-        version: "TODO".into(),
+        connection_hops: vec![new.counterparty.connection_id],
+        version: new.version,
         counterparty: Some(proto::channel::Counterparty {
             channel_id: get_channel_id_str(new.number),
             port_id: new.port_id,
@@ -472,9 +489,8 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
     let expected = proto::channel::Channel {
         state: proto::channel::State::Open as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
-        // TODO: connections[new.connection_hops[0]].counterparty.connection_id
-        connection_hops: vec![],
-        version: "TODO".into(),
+        connection_hops: vec![new.counterparty.connection_id],
+        version: new.version,
         counterparty: Some(proto::channel::Counterparty {
             channel_id: get_channel_id_str(new.number),
             port_id: new.port_id,
@@ -547,8 +563,7 @@ pub fn handle_msg_channel_close_confirm<C: Client>(
     let expected = proto::channel::Channel {
         state: proto::channel::State::Closed as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
-        // TODO: connections[new.connection_hops[0]].counterparty.connection_id
-        connection_hops: vec![],
+        connection_hops: vec![new.counterparty.connection_id],
         version: "TODO".into(),
         counterparty: Some(proto::channel::Counterparty {
             channel_id: get_channel_id_str(new.number),

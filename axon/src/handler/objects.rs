@@ -25,6 +25,7 @@ pub struct IbcChannel {
     pub sequence: Sequence,
     pub counterparty: ChannelCounterparty,
     pub connection_hops: Vec<String>,
+    pub version: String,
 }
 
 impl Default for IbcChannel {
@@ -37,6 +38,7 @@ impl Default for IbcChannel {
             sequence: Default::default(),
             counterparty: Default::default(),
             connection_hops: Default::default(),
+            version: Default::default(),
         }
     }
 }

@@ -289,8 +289,9 @@ fn test_handle_msg_channel_open_ack_success() {
     let old_channel = IbcChannel {
         state: State::Init,
         counterparty: ChannelCounterparty {
+            channel_id: "".to_string(),
             port_id: "portid".to_string(),
-            ..Default::default()
+            connection_id: "connection-2".to_string(),
         },
         ..Default::default()
     };
@@ -300,6 +301,7 @@ fn test_handle_msg_channel_open_ack_success() {
         counterparty: ChannelCounterparty {
             channel_id: "channel-id".to_string(),
             port_id: "portid".to_string(),
+            connection_id: "connection-2".to_string(),
         },
         ..Default::default()
     };
@@ -329,8 +331,10 @@ fn test_handle_msg_channel_open_ack_failed() {
                 "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
             ),
             channel_id: String::from(""),
+            connection_id: "connection-2".into(),
         },
         connection_hops: vec![index_to_connection_id(0)],
+        version: "".into(),
     };
     let new_channel = IbcChannel {
         number: 0,
@@ -343,8 +347,10 @@ fn test_handle_msg_channel_open_ack_failed() {
                 "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
             ),
             channel_id: String::from("channel-1"),
+            connection_id: "connection-2".into(),
         },
         connection_hops: vec![index_to_connection_id(0)],
+        version: "".into(),
     };
 
     let old_args = ChannelArgs {
