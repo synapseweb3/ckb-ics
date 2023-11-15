@@ -421,6 +421,140 @@ fn handle_msg_channel_open_confirm_success() {
 }
 
 #[test]
+fn handle_msg_channel_close_init_success() {
+    let client = TestClient::default();
+
+    let old_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
+
+    let old_args = ChannelArgs {
+        open: true,
+        ..Default::default()
+    };
+
+    let new_channel = IbcChannel {
+        state: State::Closed,
+        ..Default::default()
+    };
+
+    let new_args = ChannelArgs {
+        open: false,
+        ..Default::default()
+    };
+
+    let msg = MsgChannelCloseInit {};
+
+    handle_msg_channel_close_init(client, old_channel, old_args, new_channel, new_args, msg)
+        .unwrap();
+}
+
+#[test]
+fn handle_msg_channel_close_init_failure() {
+    let client = TestClient::default();
+
+    let old_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
+
+    let old_args = ChannelArgs {
+        open: true,
+        ..Default::default()
+    };
+
+    let new_channel = IbcChannel {
+        state: State::Closed,
+        ..Default::default()
+    };
+
+    let new_args = ChannelArgs {
+        open: true, // wrong open state
+        ..Default::default()
+    };
+
+    let msg = MsgChannelCloseInit {};
+
+    if let Err(VerifyError::WrongChannelArgs) =
+        handle_msg_channel_close_init(client, old_channel, old_args, new_channel, new_args, msg)
+    {
+    } else {
+        panic!()
+    }
+}
+
+#[test]
+fn handle_msg_channel_close_confirm_success() {
+    let client = TestClient::default();
+
+    let old_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
+
+    let old_args = ChannelArgs {
+        open: true,
+        ..Default::default()
+    };
+
+    let new_channel = IbcChannel {
+        state: State::Closed,
+        ..Default::default()
+    };
+
+    let new_args = ChannelArgs {
+        open: false,
+        ..Default::default()
+    };
+
+    let msg = MsgChannelCloseConfirm {
+        proof_height: Height::default(),
+        proof_init: vec![],
+    };
+
+    handle_msg_channel_close_confirm(client, old_channel, old_args, new_channel, new_args, msg)
+        .unwrap();
+}
+
+#[test]
+fn handle_msg_channel_close_confirm_failure() {
+    let client = TestClient::default();
+
+    let old_channel = IbcChannel {
+        state: State::Open,
+        ..Default::default()
+    };
+
+    let old_args = ChannelArgs {
+        open: true,
+        ..Default::default()
+    };
+
+    let new_channel = IbcChannel {
+        state: State::Open, // wrong channel state
+        ..Default::default()
+    };
+
+    let new_args = ChannelArgs {
+        open: false,
+        ..Default::default()
+    };
+
+    let msg = MsgChannelCloseConfirm {
+        proof_height: Default::default(),
+        proof_init: vec![],
+    };
+
+    if let Err(VerifyError::WrongChannel) =
+        handle_msg_channel_close_confirm(client, old_channel, old_args, new_channel, new_args, msg)
+    {
+    } else {
+        panic!()
+    }
+}
+
+#[test]
 fn handle_msg_channel_open_confirm_channel_unmatch() {
     let client = TestClient::default();
 

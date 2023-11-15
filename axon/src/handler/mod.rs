@@ -6,10 +6,10 @@ use rlp::decode;
 
 use crate::consts::COMMITMENT_PREFIX;
 use crate::message::{
-    Envelope, MsgAckPacket, MsgChannelOpenAck, MsgChannelOpenConfirm, MsgChannelOpenInit,
-    MsgChannelOpenTry, MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
-    MsgConnectionOpenTry, MsgConsumeAckPacket, MsgRecvPacket, MsgSendPacket, MsgType,
-    MsgWriteAckPacket,
+    Envelope, MsgAckPacket, MsgChannelCloseConfirm, MsgChannelCloseInit, MsgChannelOpenAck,
+    MsgChannelOpenConfirm, MsgChannelOpenInit, MsgChannelOpenTry, MsgConnectionOpenAck,
+    MsgConnectionOpenConfirm, MsgConnectionOpenInit, MsgConnectionOpenTry, MsgConsumeAckPacket,
+    MsgRecvPacket, MsgSendPacket, MsgType, MsgWriteAckPacket,
 };
 use crate::object::{ConnectionEnd, Ordering, State, VerifyError, Version};
 use crate::proto::client::Height;
@@ -239,7 +239,6 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_channel_open_init_and_try<C: Client>(
     client: C,
     channel: IbcChannel,
@@ -494,7 +493,79 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+pub fn handle_msg_channel_close_init<C: Client>(
+    _: C,
+    mut old: IbcChannel,
+    mut old_args: ChannelArgs,
+    new: IbcChannel,
+    new_args: ChannelArgs,
+    _: MsgChannelCloseInit,
+) -> Result<(), VerifyError> {
+    if old.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+    if !old_args.open {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    old.state = State::Closed;
+    old_args.open = false;
+    if old != new {
+        return Err(VerifyError::WrongChannel);
+    }
+    if old_args != new_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    Ok(())
+}
+
+pub fn handle_msg_channel_close_confirm<C: Client>(
+    client: C,
+    mut old: IbcChannel,
+    mut old_args: ChannelArgs,
+    new: IbcChannel,
+    new_args: ChannelArgs,
+    msg: MsgChannelCloseConfirm,
+) -> Result<(), VerifyError> {
+    if old.state != State::Open {
+        return Err(VerifyError::WrongChannelState);
+    }
+    if !old_args.open {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    old.state = State::Closed;
+    old_args.open = false;
+    if old != new {
+        return Err(VerifyError::WrongChannel);
+    }
+    if old_args != new_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    let expected = proto::channel::Channel {
+        state: proto::channel::State::Closed as i32,
+        ordering: proto::channel::Order::from(new.order) as i32,
+        // TODO: connections[new.connection_hops[0]].counterparty.connection_id
+        connection_hops: vec![],
+        version: "TODO".into(),
+        counterparty: Some(proto::channel::Counterparty {
+            channel_id: get_channel_id_str(new.number),
+            port_id: new.port_id,
+        }),
+    };
+
+    verify_channel_state(
+        &client,
+        msg.proof_height,
+        &msg.proof_init,
+        &new.counterparty.port_id,
+        &new.counterparty.channel_id,
+        &expected,
+    )
+}
+
 pub fn handle_msg_send_packet<C: Client>(
     _: C,
     mut old_channel: IbcChannel,
@@ -546,7 +617,6 @@ pub fn handle_msg_send_packet<C: Client>(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_msg_recv_packet<C: Client>(
     client: C,
     mut old_channel: IbcChannel,
@@ -631,7 +701,6 @@ fn sha256(msgs: &[&[u8]]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_msg_ack_packet<C: Client>(
     client: C,
     mut old_channel: IbcChannel,
