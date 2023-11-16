@@ -47,7 +47,7 @@ pub mod handler;
 pub mod message;
 pub mod object;
 pub mod proto;
-pub mod verify_mpt;
+pub mod verify;
 
 use consts::CHANNEL_ID_PREFIX;
 use ethereum_types::H256;

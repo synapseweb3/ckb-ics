@@ -46,6 +46,8 @@ pub enum VerifyError {
     WrongPacketContent,
     WrongPacketArgs,
     WrongPacketAck,
+
+    Mpt = 99,
 }
 
 impl From<VerifyError> for i8 {
