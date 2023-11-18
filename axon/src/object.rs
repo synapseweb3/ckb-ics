@@ -56,6 +56,12 @@ impl From<VerifyError> for i8 {
     }
 }
 
+impl From<rlp::DecoderError> for VerifyError {
+    fn from(_value: rlp::DecoderError) -> Self {
+        Self::Mpt
+    }
+}
+
 impl_enum_rlp!(
     #[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
     #[repr(u8)]
