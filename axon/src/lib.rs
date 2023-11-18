@@ -57,24 +57,46 @@ use rlp::{Encodable, RlpStream};
 pub type U256 = Vec<u8>;
 pub type Bytes = Vec<u8>;
 
+macro_rules! try_read {
+    ($buf:ident, $len:literal) => {{
+        let x: &[u8; $len] = $buf.get(..$len).ok_or(())?.try_into().unwrap();
+        $buf = &$buf[$len..];
+        x
+    }};
+}
+
+macro_rules! try_read_last {
+    ($buf:ident, $len:literal) => {{
+        let x: &[u8; $len] = $buf.get(..$len).ok_or(())?.try_into().unwrap();
+        $buf = &$buf[$len..];
+        if !$buf.is_empty() {
+            return Err(());
+        }
+        x
+    }};
+}
+
 // The args of the connection cell's script
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ConnectionArgs {
     pub client_id: [u8; 32],
+    pub ibc_handler_address: [u8; 20],
 }
 
 impl ConnectionArgs {
-    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
-        if slice.len() != 32 {
-            return Err(());
-        }
-        Ok(ConnectionArgs {
-            client_id: slice[0..32].try_into().unwrap(),
+    pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
+        Ok(Self {
+            client_id: *try_read!(slice, 32),
+            ibc_handler_address: *try_read_last!(slice, 20),
         })
     }
 
     pub fn get_client_id(slice: &[u8]) -> &[u8] {
         &slice[0..32]
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        [&self.client_id[..], &self.ibc_handler_address].concat()
     }
 }
 
@@ -82,6 +104,7 @@ impl ConnectionArgs {
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct ChannelArgs {
     pub client_id: [u8; 32],
+    pub ibc_handler_address: [u8; 20],
     // For the sake of convenience, we use a bool here to describe
     // whether this channel is open. Relayer search the the unopen channel cell
     // frequently.
@@ -92,35 +115,31 @@ pub struct ChannelArgs {
 }
 
 impl ChannelArgs {
-    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
-        if slice.len() != 67 {
-            return Err(());
-        }
-        let client_id: [u8; 32] = slice[0..32].try_into().unwrap();
-        let open = slice.get(32).unwrap() > &0;
-        let channel_id = u16::from_le_bytes(slice[33..35].try_into().unwrap());
-        let port_id: [u8; 32] = slice[35..67].try_into().unwrap();
-        Ok(ChannelArgs {
-            client_id,
-            open,
-            channel_id,
-            port_id,
+    pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
+        Ok(Self {
+            client_id: *try_read!(slice, 32),
+            ibc_handler_address: *try_read!(slice, 20),
+            open: try_read!(slice, 1) != &[0],
+            channel_id: u16::from_le_bytes(*try_read!(slice, 2)),
+            port_id: *try_read_last!(slice, 32),
         })
     }
 
     pub fn get_prefix_for_searching_unopen(&self) -> Vec<u8> {
-        let mut result = self.client_id.to_vec();
-        let open: u8 = if self.open { 1 } else { 0 };
-        result.push(open);
-        result
+        [
+            &self.client_id[..],
+            &self.ibc_handler_address,
+            &if self.open { [1] } else { [0] },
+        ]
+        .concat()
     }
 
     pub fn get_prefix_for_all(&self) -> Vec<u8> {
-        self.client_id.to_vec()
+        [&self.client_id[..], &self.ibc_handler_address].concat()
     }
 
     pub fn is_open(data: Vec<u8>) -> Result<bool, ()> {
-        let open_byte = data.get(33).ok_or(())?;
+        let open_byte = data.get(32 + 20 + 1).ok_or(())?;
         if *open_byte == 1 {
             Ok(true)
         } else {
@@ -129,10 +148,14 @@ impl ChannelArgs {
     }
 
     pub fn to_args(self) -> Vec<u8> {
-        let mut result = self.get_prefix_for_searching_unopen();
-        result.extend(self.channel_id.to_le_bytes());
-        result.extend(self.port_id);
-        result
+        [
+            &self.client_id[..],
+            &self.ibc_handler_address,
+            &if self.open { [1] } else { [0] },
+            &self.channel_id.to_le_bytes(),
+            &self.port_id,
+        ]
+        .concat()
     }
 }
 
@@ -245,6 +268,7 @@ mod tests {
     fn channel_args_conversion() {
         let channel_args = ChannelArgs {
             client_id: [1; 32],
+            ibc_handler_address: [7; 20],
             open: true,
             channel_id: 23,
             port_id: [2; 32],

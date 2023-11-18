@@ -49,8 +49,8 @@ fn test_handle_msg_connection_open_init() {
         ..Default::default()
     };
 
-    let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
-    let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+    let old_args = ConnectionArgs::default();
+    let new_args = ConnectionArgs::default();
 
     let msg = MsgConnectionOpenInit {};
     handle_msg_connection_open_init(
@@ -92,8 +92,8 @@ fn test_handle_msg_connection_open_try() {
         },
         proof_init: vec![],
     };
-    let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
-    let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+    let old_args = ConnectionArgs::default();
+    let new_args = ConnectionArgs::default();
 
     handle_msg_connection_open_try(
         client,
@@ -151,8 +151,8 @@ fn test_handle_msg_connection_open_ack() {
         ..Default::default()
     };
 
-    let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
-    let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
+    let old_args = ConnectionArgs::default();
+    let new_args = ConnectionArgs::default();
     handle_msg_connection_open_ack(
         client,
         old_connections,
@@ -213,9 +213,8 @@ fn test_handle_msg_connection_open_confirm() {
         ..Default::default()
     };
 
-    let old_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
-    let new_args = ConnectionArgs::from_slice(&[0u8; 32]).unwrap();
-
+    let old_args = ConnectionArgs::default();
+    let new_args = ConnectionArgs::default();
     handle_msg_connection_open_confirm(
         client,
         old_connections,
@@ -358,6 +357,7 @@ fn test_handle_msg_channel_open_ack_failed() {
             59, 202, 83, 204, 94, 60, 251, 53, 29, 14, 91, 232, 113, 191, 94, 227, 72, 206, 76,
             254, 177, 59, 247, 13, 54, 105, 235, 22, 75, 21, 45, 12,
         ],
+        ibc_handler_address: [7; 20],
         open: false,
         channel_id: 0,
         port_id: [
@@ -371,6 +371,7 @@ fn test_handle_msg_channel_open_ack_failed() {
             59, 202, 83, 204, 94, 60, 251, 53, 29, 14, 91, 232, 113, 191, 94, 227, 72, 206, 76,
             254, 177, 59, 247, 13, 54, 105, 235, 22, 75, 21, 45, 12,
         ],
+        ibc_handler_address: [7; 20],
         open: true,
         channel_id: 0,
         port_id: [
