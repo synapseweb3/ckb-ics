@@ -47,7 +47,7 @@ pub mod handler;
 pub mod message;
 pub mod object;
 pub mod proto;
-pub mod verify;
+pub mod axon_client;
 
 use consts::CHANNEL_ID_PREFIX;
 use ethereum_types::H256;
