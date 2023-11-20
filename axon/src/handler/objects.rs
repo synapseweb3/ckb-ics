@@ -3,7 +3,6 @@ use ethereum_types::H256;
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
-use crate::convert_byte32_to_hex;
 use crate::object::{ChannelCounterparty, ConnectionEnd, Ordering, Packet, State, VerifyError};
 use crate::proto::client::Height;
 
@@ -32,7 +31,7 @@ impl Default for IbcChannel {
     fn default() -> Self {
         Self {
             number: Default::default(),
-            port_id: convert_byte32_to_hex(&[0u8; 32]),
+            port_id: hex::encode([0u8; 32]),
             state: Default::default(),
             order: Default::default(),
             sequence: Default::default(),
@@ -96,8 +95,6 @@ impl Sequence {
 }
 
 pub trait Client {
-    fn client_id(&self) -> &[u8; 32];
-
     fn verify_membership(
         &self,
         height: Height,

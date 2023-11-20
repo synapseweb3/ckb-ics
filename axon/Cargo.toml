@@ -6,12 +6,12 @@ edition = "2021"
 [dependencies]
 rlp = {version = "0.5.2", default-features = false}
 rlp-derive = {version = "0.1.0", default-features = false}
-
 ethereum-types = {version = "0.14.1", default-features = false, features= ["ethbloom", "rlp"]}
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 bytes = { version = "1.4.0", default-features = false}
 sha2 = { version = "0.10.8", default-features = false }
 prost = { version = "0.12.1", default-features = false, features = ["prost-derive"] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 
 [build-dependencies]
 prost-build = "0.12.1"
@@ -20,5 +20,4 @@ protobuf-src = "1.1.0"
 [dev-dependencies]
 cita_trie = "5.0.1"
 hasher = { version = "0.1.4", features = ["hash-keccak"] }
-hex = "0.4.3"
 proptest = "1.4.0"

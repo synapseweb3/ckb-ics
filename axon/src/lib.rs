@@ -52,7 +52,6 @@ pub mod verify;
 use consts::CHANNEL_ID_PREFIX;
 use ethereum_types::H256;
 use object::VerifyError;
-use rlp::{Encodable, RlpStream};
 
 pub type U256 = Vec<u8>;
 pub type Bytes = Vec<u8>;
@@ -79,31 +78,35 @@ macro_rules! try_read_last {
 // The args of the connection cell's script
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ConnectionArgs {
-    pub client_id: [u8; 32],
+    pub metadata_type_id: [u8; 32],
     pub ibc_handler_address: [u8; 20],
 }
 
 impl ConnectionArgs {
     pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
         Ok(Self {
-            client_id: *try_read!(slice, 32),
+            metadata_type_id: *try_read!(slice, 32),
             ibc_handler_address: *try_read_last!(slice, 20),
         })
     }
 
-    pub fn get_client_id(slice: &[u8]) -> &[u8] {
-        &slice[0..32]
+    pub fn encode(&self) -> Vec<u8> {
+        [&self.metadata_type_id[..], &self.ibc_handler_address].concat()
     }
 
-    pub fn encode(&self) -> Vec<u8> {
-        [&self.client_id[..], &self.ibc_handler_address].concat()
+    pub fn client_id(&self) -> String {
+        format!(
+            "{}-{}",
+            hex::encode(&self.metadata_type_id[..20]),
+            hex::encode(self.ibc_handler_address)
+        )
     }
 }
 
 // The args of the channel cell's script
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct ChannelArgs {
-    pub client_id: [u8; 32],
+    pub metadata_type_id: [u8; 32],
     pub ibc_handler_address: [u8; 20],
     // For the sake of convenience, we use a bool here to describe
     // whether this channel is open. Relayer search the the unopen channel cell
@@ -115,9 +118,16 @@ pub struct ChannelArgs {
 }
 
 impl ChannelArgs {
+    pub fn connection(&self) -> ConnectionArgs {
+        ConnectionArgs {
+            metadata_type_id: self.metadata_type_id,
+            ibc_handler_address: self.ibc_handler_address,
+        }
+    }
+
     pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
         Ok(Self {
-            client_id: *try_read!(slice, 32),
+            metadata_type_id: *try_read!(slice, 32),
             ibc_handler_address: *try_read!(slice, 20),
             open: try_read!(slice, 1) != &[0],
             channel_id: u16::from_le_bytes(*try_read!(slice, 2)),
@@ -127,7 +137,7 @@ impl ChannelArgs {
 
     pub fn get_prefix_for_searching_unopen(&self) -> Vec<u8> {
         [
-            &self.client_id[..],
+            &self.metadata_type_id[..],
             &self.ibc_handler_address,
             &if self.open { [1] } else { [0] },
         ]
@@ -135,7 +145,7 @@ impl ChannelArgs {
     }
 
     pub fn get_prefix_for_all(&self) -> Vec<u8> {
-        [&self.client_id[..], &self.ibc_handler_address].concat()
+        [&self.metadata_type_id[..], &self.ibc_handler_address].concat()
     }
 
     pub fn is_open(data: Vec<u8>) -> Result<bool, ()> {
@@ -149,7 +159,7 @@ impl ChannelArgs {
 
     pub fn to_args(self) -> Vec<u8> {
         [
-            &self.client_id[..],
+            &self.metadata_type_id[..],
             &self.ibc_handler_address,
             &if self.open { [1] } else { [0] },
             &self.channel_id.to_le_bytes(),
@@ -200,33 +210,6 @@ impl PacketArgs {
     }
 }
 
-pub fn rlp_opt<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
-    if let Some(inner) = opt {
-        rlp.append(inner);
-    } else {
-        rlp.append(&"");
-    }
-}
-
-pub fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
-    if let Some(inner) = opt {
-        rlp.append(inner);
-    } else {
-        // Choice of `u8` type here is arbitrary as all empty lists are encoded the same.
-        rlp.append_list::<u8, u8>(&[]);
-    }
-}
-
-pub fn convert_byte32_to_hex(bytes32: &[u8; 32]) -> String {
-    format!("{:x}", H256::from(bytes32))
-}
-
-pub fn convert_hex_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
-    Ok(H256::from_str(s)
-        .map_err(|_| VerifyError::WrongClient)?
-        .into())
-}
-
 pub fn convert_hex_to_port_id(s: &str) -> Result<[u8; 32], VerifyError> {
     Ok(H256::from_str(s)
         .map_err(|_| VerifyError::WrongPortId)?
@@ -251,23 +234,10 @@ pub fn get_channel_id_str(idx: u16) -> String {
 mod tests {
     use crate::ChannelArgs;
 
-    use super::{convert_byte32_to_hex, convert_hex_to_client_id};
-
-    #[test]
-    fn client_id_to_string() {
-        let actual = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 32,
-        ];
-        let s = convert_byte32_to_hex(&actual);
-        let r = convert_hex_to_client_id(&s).unwrap();
-        assert_eq!(actual, r);
-    }
-
     #[test]
     fn channel_args_conversion() {
         let channel_args = ChannelArgs {
-            client_id: [1; 32],
+            metadata_type_id: [1; 32],
             ibc_handler_address: [7; 20],
             open: true,
             channel_id: 23,

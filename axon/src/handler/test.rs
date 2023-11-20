@@ -13,9 +13,7 @@ fn index_to_connection_id(index: usize) -> String {
 }
 
 #[derive(Debug, Default)]
-pub struct TestClient {
-    client: [u8; 32],
-}
+pub struct TestClient {}
 
 impl Client for TestClient {
     fn verify_membership(
@@ -27,10 +25,6 @@ impl Client for TestClient {
     ) -> Result<(), VerifyError> {
         Ok(())
     }
-
-    fn client_id(&self) -> &[u8; 32] {
-        &self.client
-    }
 }
 
 #[test]
@@ -39,7 +33,6 @@ fn test_handle_msg_connection_open_init() {
 
     let new_connection_end = ConnectionEnd {
         state: State::Init,
-        client_id: convert_byte32_to_hex(&[0u8; 32]),
         ..Default::default()
     };
 
@@ -51,7 +44,6 @@ fn test_handle_msg_connection_open_init() {
 
     let old_args = ConnectionArgs::default();
     let new_args = ConnectionArgs::default();
-
     let msg = MsgConnectionOpenInit {};
     handle_msg_connection_open_init(
         client,
@@ -70,7 +62,6 @@ fn test_handle_msg_connection_open_try() {
 
     let new_connection_end = ConnectionEnd {
         state: State::OpenTry,
-        client_id: convert_byte32_to_hex(&[0u8; 32]),
         counterparty: ConnectionCounterparty {
             client_id: String::from("dummy"),
             connection_id: "dummy".into(),
@@ -353,7 +344,7 @@ fn test_handle_msg_channel_open_ack_failed() {
     };
 
     let old_args = ChannelArgs {
-        client_id: [
+        metadata_type_id: [
             59, 202, 83, 204, 94, 60, 251, 53, 29, 14, 91, 232, 113, 191, 94, 227, 72, 206, 76,
             254, 177, 59, 247, 13, 54, 105, 235, 22, 75, 21, 45, 12,
         ],
@@ -367,7 +358,7 @@ fn test_handle_msg_channel_open_ack_failed() {
     };
 
     let new_args = ChannelArgs {
-        client_id: [
+        metadata_type_id: [
             59, 202, 83, 204, 94, 60, 251, 53, 29, 14, 91, 232, 113, 191, 94, 227, 72, 206, 76,
             254, 177, 59, 247, 13, 54, 105, 235, 22, 75, 21, 45, 12,
         ],

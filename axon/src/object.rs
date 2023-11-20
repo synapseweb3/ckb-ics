@@ -1,5 +1,4 @@
 use crate::consts::COMMITMENT_PREFIX;
-use crate::convert_byte32_to_hex;
 use crate::get_channel_id_str;
 use crate::proto;
 use crate::Bytes;
@@ -139,9 +138,9 @@ impl Default for Packet {
     fn default() -> Self {
         Self {
             sequence: Default::default(),
-            source_port_id: convert_byte32_to_hex(&[0u8; 32]),
+            source_port_id: hex::encode([0u8; 32]),
             source_channel_id: get_channel_id_str(0),
-            destination_port_id: convert_byte32_to_hex(&[0u8; 32]),
+            destination_port_id: hex::encode([0u8; 32]),
             destination_channel_id: get_channel_id_str(0),
             data: Default::default(),
             timeout_height: 0,
@@ -177,7 +176,6 @@ impl From<Version> for proto::connection::Version {
 #[derive(Debug, PartialEq, Eq, Clone, RlpEncodable, RlpDecodable)]
 pub struct ConnectionEnd {
     pub state: State,
-    pub client_id: String,
     pub counterparty: ConnectionCounterparty,
     pub delay_period: u64,
     pub versions: Vec<Version>,
@@ -187,7 +185,6 @@ impl Default for ConnectionEnd {
     fn default() -> Self {
         Self {
             state: Default::default(),
-            client_id: convert_byte32_to_hex(&[0u8; 32]),
             counterparty: Default::default(),
             delay_period: Default::default(),
             versions: vec![Version::version_1()],

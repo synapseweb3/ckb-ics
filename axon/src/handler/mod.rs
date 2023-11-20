@@ -14,10 +14,7 @@ use crate::message::{
 use crate::object::{ConnectionEnd, Ordering, State, VerifyError, Version};
 use crate::proto::client::Height;
 use crate::{commitment::*, proto};
-use crate::{
-    convert_byte32_to_hex, convert_connection_id_to_index, convert_hex_to_client_id,
-    convert_hex_to_port_id, get_channel_id_str,
-};
+use crate::{convert_connection_id_to_index, convert_hex_to_port_id, get_channel_id_str};
 use crate::{ChannelArgs, ConnectionArgs, PacketArgs};
 
 mod objects;
@@ -27,14 +24,14 @@ mod test;
 pub use objects::*;
 
 pub fn handle_msg_connection_open_init<C: Client>(
-    client: C,
+    _client: C,
     mut old_connections: IbcConnections,
     old_args: ConnectionArgs,
     new_connections: IbcConnections,
     new_args: ConnectionArgs,
     _: MsgConnectionOpenInit,
 ) -> Result<(), VerifyError> {
-    if old_args != new_args || old_args.client_id.as_slice() != client.client_id() {
+    if old_args != new_args {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -53,7 +50,6 @@ pub fn handle_msg_connection_open_init<C: Client>(
 
     old_connections.connections.push(ConnectionEnd {
         state: State::Init,
-        client_id: convert_byte32_to_hex(client.client_id()),
         counterparty: new.counterparty.clone(),
         versions: new.versions.clone(),
         delay_period: new.delay_period,
@@ -74,7 +70,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
     new_args: ConnectionArgs,
     msg: MsgConnectionOpenTry,
 ) -> Result<(), VerifyError> {
-    if old_args != new_args || old_args.client_id.as_slice() != client.client_id() {
+    if old_args != new_args {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -87,7 +83,6 @@ pub fn handle_msg_connection_open_try<C: Client>(
 
     old_connections.connections.push(ConnectionEnd {
         state: State::OpenTry,
-        client_id: convert_byte32_to_hex(client.client_id()),
         counterparty: counterparty.clone(),
         versions: vec![Version::version_1()],
         delay_period: connection.delay_period,
@@ -101,7 +96,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
         state: proto::connection::State::Init as _,
         client_id: counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            client_id: convert_byte32_to_hex(client.client_id()),
+            client_id: new_args.client_id(),
             connection_id: "".to_string(),
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
@@ -146,7 +141,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
     new_args: ConnectionArgs,
     msg: MsgConnectionOpenAck,
 ) -> Result<(), VerifyError> {
-    if old_args != new_args || &old_args.client_id != client.client_id() {
+    if old_args != new_args {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -168,7 +163,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
         state: proto::connection::State::Tryopen as _,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            client_id: convert_byte32_to_hex(client.client_id()),
+            client_id: new_args.client_id(),
             connection_id: format!("connection-{conn_idx}"),
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
@@ -197,7 +192,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     new_args: ConnectionArgs,
     msg: MsgConnectionOpenConfirm,
 ) -> Result<(), VerifyError> {
-    if old_args != new_args || &old_args.client_id != client.client_id() {
+    if old_args != new_args {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
@@ -218,7 +213,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
         state: proto::connection::State::Open as _,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            client_id: convert_byte32_to_hex(client.client_id()),
+            client_id: new_args.client_id(),
             connection_id: format!("connection-{conn_idx}"),
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
@@ -257,13 +252,11 @@ pub fn handle_channel_open_init_and_try<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
-    if old_connection_args != new_connection_args
-        || &old_connection_args.client_id != client.client_id()
-    {
+    if old_connection_args != new_connection_args {
         return Err(VerifyError::WrongConnectionArgs);
     }
 
-    if channel_args.client_id != old_connection_args.client_id
+    if channel_args.connection() != old_connection_args
         || channel_args.open
         || channel_args.channel_id != channel.number
         || channel_args.port_id != convert_hex_to_port_id(&channel.port_id)?
@@ -287,7 +280,7 @@ pub fn handle_channel_open_init_and_try<C: Client>(
 }
 
 pub fn handle_msg_channel_open_init<C: Client>(
-    client: C,
+    _client: C,
     ibc_connections: &IbcConnections,
     new: IbcChannel,
     _msg: MsgChannelOpenInit,
@@ -300,10 +293,6 @@ pub fn handle_msg_channel_open_init<C: Client>(
         .connections
         .get(conn_id)
         .ok_or(VerifyError::WrongConnectionnNumber)?;
-
-    if &convert_hex_to_client_id(&conn.client_id)? != client.client_id() {
-        return Err(VerifyError::WrongConnectionClient);
-    }
 
     if conn.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
@@ -338,10 +327,6 @@ pub fn handle_msg_channel_open_try<C: Client>(
         .connections
         .get(conn_id)
         .ok_or(VerifyError::WrongConnectionnNumber)?;
-
-    if &convert_hex_to_client_id(&conn.client_id)? != client.client_id() {
-        return Err(VerifyError::WrongConnectionClient);
-    }
 
     if conn.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
@@ -410,7 +395,7 @@ pub fn handle_channel_open_ack_and_confirm<C: Client>(
 ) -> Result<(), VerifyError> {
     if old_args.open
         || !new_args.open
-        || old_args.client_id != new_args.client_id
+        || old_args.metadata_type_id != new_args.metadata_type_id
         || old_args.channel_id != new_args.channel_id
         || old_args.port_id != new_args.port_id
     {
