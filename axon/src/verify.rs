@@ -1,3 +1,4 @@
+use ethereum_types::U256;
 use rlp::Rlp;
 use tiny_keccak::{Hasher, Keccak};
 
@@ -163,7 +164,7 @@ pub fn verify_commitment<T1: AsRef<[u8]>, T2: AsRef<[u8]>>(
     let slot_hash = keccak256(&slot);
     // Slot value (commitment mapping value) is keccak256(commitment value)
     let slot_value = keccak256(value);
-    let slot_value_rlp = rlp::encode(&slot_value.to_vec());
+    let slot_value_rlp = rlp::encode(&U256::from(&slot_value));
     let trie_value = verify_mpt(
         storage_root,
         if secure_trie { &slot_hash } else { &slot },
