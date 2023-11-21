@@ -1,12 +1,12 @@
 use alloc::vec::Vec;
-use ethereum_types::H256;
 use core::cell::RefCell;
+use ethereum_types::H256;
 
-use tiny_keccak::{Hasher, Keccak};
-use axon_tools::types::{Block as AxonBlock, ValidatorExtend, Proof as AxonBlockProof};
-use axon_types::metadata::Metadata;
-use molecule::prelude::Entity;
+use axon_tools::types::{Block as AxonBlock, Proof as AxonBlockProof, ValidatorExtend};
+use axon_types::metadata::MetadataCellDataReader;
+use molecule::prelude::*;
 use rlp_derive::{RlpDecodable, RlpEncodable};
+use tiny_keccak::{Hasher, Keccak};
 
 use crate::handler::Client;
 use crate::object::VerifyError;
@@ -85,33 +85,34 @@ impl Client for AxonClient {
 }
 
 impl AxonClient {
-    pub fn new(ibc_handler_address: [u8; 20], slice: &[u8]) -> Result<Self, VerifyError> {
-        let metadata = Metadata::from_slice(slice).map_err(|_| VerifyError::SerdeError)?;
-        let validators = metadata.validators();
-        let mut client_validators: Vec<ValidatorExtend> = Vec::new();
-        for i in 0..validators.len() {
-            let v = validators.get(i).unwrap();
+    pub fn new(ibc_handler_address: [u8; 20], metadata_cell_data: &[u8]) -> Result<Self, VerifyError> {
+        let metadata_cell_data =
+            MetadataCellDataReader::from_slice(metadata_cell_data).map_err(|_| VerifyError::SerdeError)?;
+        let metadata = metadata_cell_data.metadata().get(0).ok_or(VerifyError::SerdeError)?;
+        let mut validators: Vec<ValidatorExtend> = Vec::new();
+        for v in metadata.validators().iter() {
             let bls_pub_key = v.bls_pub_key().raw_data().to_vec();
             let pub_key = v.pub_key().raw_data().to_vec();
-            let address_data = v.address().raw_data();
-            let address: [u8; 20] = address_data
-                .as_ref()
+            let address: [u8; 20] = v
+                .address()
+                .raw_data()
                 .try_into()
                 .map_err(|_| VerifyError::SerdeError)?;
-            let height: [u8; 4] = v.propose_weight().as_slice().try_into().unwrap();
-            let weight: [u8; 4] = v.vote_weight().as_slice().try_into().unwrap();
+            let propose_weight =
+                u32::from_le_bytes(v.propose_weight().as_slice().try_into().unwrap());
+            let vote_weight = u32::from_le_bytes(v.vote_weight().as_slice().try_into().unwrap());
             let validator = ValidatorExtend {
                 bls_pub_key: bls_pub_key.into(),
                 pub_key: pub_key.into(),
                 address: address.into(),
-                propose_weight: u32::from_le_bytes(height),
-                vote_weight: u32::from_le_bytes(weight),
+                propose_weight,
+                vote_weight,
             };
-            client_validators.push(validator);
+            validators.push(validator);
         }
         Ok(AxonClient {
             ibc_handler_address,
-            validators: client_validators.into(),
+            validators: validators.into(),
         })
     }
 }
