@@ -19,11 +19,11 @@ pub type ProofNode = Vec<u8>;
 
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct AxonCommitmentProof {
-    block: AxonBlock,
-    previous_state_root: H256,
-    block_proof: AxonBlockProof,
-    account_proof: Vec<ProofNode>,
-    storage_proof: Vec<ProofNode>,
+    pub block: AxonBlock,
+    pub previous_state_root: H256,
+    pub block_proof: AxonBlockProof,
+    pub account_proof: Vec<ProofNode>,
+    pub storage_proof: Vec<ProofNode>,
 }
 
 #[derive(Default)]
