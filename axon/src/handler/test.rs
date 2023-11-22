@@ -1,16 +1,11 @@
 use alloc::string::String;
 
-use crate::consts;
 use crate::handler::*;
 use crate::object::ChannelCounterparty;
 use crate::object::ConnectionCounterparty;
 use crate::object::ConnectionEnd;
 use crate::object::Packet;
 use crate::proto::client::Height;
-
-fn index_to_connection_id(index: usize) -> String {
-    format!("{}{index}", consts::CONNECTION_ID_PREFIX)
-}
 
 #[derive(Debug, Default)]
 pub struct TestClient {}
@@ -219,8 +214,6 @@ fn test_handle_msg_connection_open_confirm() {
 
 #[test]
 fn test_handle_msg_channel_open_init() {
-    let client = TestClient::default();
-
     let connection_end = ConnectionEnd {
         state: State::Open,
         ..Default::default()
@@ -231,14 +224,16 @@ fn test_handle_msg_channel_open_init() {
         connections: vec![connection_end],
     };
 
+    let client_id = "client-8";
+
     let channel = IbcChannel {
         state: State::Init,
-        connection_hops: vec![index_to_connection_id(0)],
+        connection_hops: vec![connection_id(client_id, 0)],
         ..Default::default()
     };
 
     let msg = MsgChannelOpenInit {};
-    handle_msg_channel_open_init(client, &new_connections, channel, msg).unwrap();
+    handle_msg_channel_open_init(client_id, &new_connections, channel, msg).unwrap();
 }
 
 #[test]
@@ -255,9 +250,11 @@ fn test_handle_msg_channel_open_try_success() {
         connections: vec![connection_end],
     };
 
+    let client_id = "client-8";
+
     let channel = IbcChannel {
         state: State::OpenTry,
-        connection_hops: vec![index_to_connection_id(0)],
+        connection_hops: vec![connection_id(client_id, 0)],
         ..Default::default()
     };
 
@@ -269,7 +266,7 @@ fn test_handle_msg_channel_open_try_success() {
         proof_init: vec![],
     };
 
-    handle_msg_channel_open_try(client, &new_connections, channel, msg).unwrap()
+    handle_msg_channel_open_try(client, client_id, &new_connections, channel, msg).unwrap()
 }
 
 #[test]
@@ -309,40 +306,6 @@ fn test_handle_msg_channel_open_ack_success() {
 
 #[test]
 fn test_handle_msg_channel_open_ack_failed() {
-    let client = TestClient::default();
-    let old_channel = IbcChannel {
-        number: 0,
-        port_id: String::from("b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450"),
-        state: State::Init,
-        order: Ordering::Unordered,
-        sequence: Sequence::default(),
-        counterparty: ChannelCounterparty {
-            port_id: String::from(
-                "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
-            ),
-            channel_id: String::from(""),
-            connection_id: "connection-2".into(),
-        },
-        connection_hops: vec![index_to_connection_id(0)],
-        version: "".into(),
-    };
-    let new_channel = IbcChannel {
-        number: 0,
-        port_id: String::from("b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450"),
-        state: State::Open,
-        order: Ordering::Unordered,
-        sequence: Sequence::default(),
-        counterparty: ChannelCounterparty {
-            port_id: String::from(
-                "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
-            ),
-            channel_id: String::from("channel-1"),
-            connection_id: "connection-2".into(),
-        },
-        connection_hops: vec![index_to_connection_id(0)],
-        version: "".into(),
-    };
-
     let old_args = ChannelArgs {
         metadata_type_id: [
             59, 202, 83, 204, 94, 60, 251, 53, 29, 14, 91, 232, 113, 191, 94, 227, 72, 206, 76,
@@ -369,6 +332,45 @@ fn test_handle_msg_channel_open_ack_failed() {
             182, 172, 119, 152, 129, 180, 254, 5, 161, 103, 228, 19, 255, 83, 68, 105, 182, 181,
             246, 192, 109, 149, 228, 197, 35, 235, 41, 69, 216, 94, 212, 80,
         ],
+    };
+
+    let client_id = ConnectionArgs {
+        metadata_type_id: new_args.metadata_type_id,
+        ibc_handler_address: new_args.ibc_handler_address,
+    }.client_id();
+
+    let client = TestClient::default();
+    let old_channel = IbcChannel {
+        number: 0,
+        port_id: String::from("b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450"),
+        state: State::Init,
+        order: Ordering::Unordered,
+        sequence: Sequence::default(),
+        counterparty: ChannelCounterparty {
+            port_id: String::from(
+                "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
+            ),
+            channel_id: String::from(""),
+            connection_id: "connection-2".into(),
+        },
+        connection_hops: vec![connection_id(&client_id, 0)],
+        version: "".into(),
+    };
+    let new_channel = IbcChannel {
+        number: 0,
+        port_id: String::from("b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450"),
+        state: State::Open,
+        order: Ordering::Unordered,
+        sequence: Sequence::default(),
+        counterparty: ChannelCounterparty {
+            port_id: String::from(
+                "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
+            ),
+            channel_id: String::from("channel-1"),
+            connection_id: "connection-2".into(),
+        },
+        connection_hops: vec![connection_id(&client_id, 0)],
+        version: "".into(),
     };
 
     let envelope = Envelope {

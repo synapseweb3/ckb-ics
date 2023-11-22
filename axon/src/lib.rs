@@ -4,8 +4,6 @@
 #[macro_use]
 extern crate alloc;
 
-use core::str::FromStr;
-
 use alloc::string::String;
 pub use alloc::vec::Vec;
 
@@ -41,16 +39,15 @@ macro_rules! impl_enum_rlp {
     }
 }
 
+pub mod axon_client;
 pub mod commitment;
 pub mod consts;
 pub mod handler;
 pub mod message;
 pub mod object;
 pub mod proto;
-pub mod axon_client;
 
 use consts::CHANNEL_ID_PREFIX;
-use ethereum_types::H256;
 use object::VerifyError;
 
 pub type U256 = Vec<u8>;
@@ -210,20 +207,13 @@ impl PacketArgs {
     }
 }
 
-pub fn convert_hex_to_port_id(s: &str) -> Result<[u8; 32], VerifyError> {
-    Ok(H256::from_str(s)
-        .map_err(|_| VerifyError::WrongPortId)?
-        .into())
-}
-
-// ConnectionId example: xxxxxx-connection-0, `xxxxxx` is the prefix of hex encoded ClientId
-pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, VerifyError> {
-    let index_str = connection_id
-        .split('-')
-        .last()
-        .ok_or(VerifyError::WrongConnectionId)?;
-    let index = usize::from_str(index_str).map_err(|_| VerifyError::WrongConnectionId)?;
-    Ok(index)
+pub fn connection_id(client_id: &str, connection_idx: usize) -> String {
+    format!(
+        "{}-{}-{}",
+        &client_id[..6],
+        consts::CONNECTION_ID_PREFIX,
+        connection_idx
+    )
 }
 
 pub fn get_channel_id_str(idx: u16) -> String {

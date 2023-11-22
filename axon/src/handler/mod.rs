@@ -5,6 +5,7 @@ use prost::Message;
 use rlp::decode;
 
 use crate::consts::COMMITMENT_PREFIX;
+use crate::get_channel_id_str;
 use crate::message::{
     Envelope, MsgAckPacket, MsgChannelCloseConfirm, MsgChannelCloseInit, MsgChannelOpenAck,
     MsgChannelOpenConfirm, MsgChannelOpenInit, MsgChannelOpenTry, MsgConnectionOpenAck,
@@ -13,8 +14,7 @@ use crate::message::{
 };
 use crate::object::{ConnectionEnd, Ordering, State, VerifyError, Version};
 use crate::proto::client::Height;
-use crate::{commitment::*, proto};
-use crate::{convert_connection_id_to_index, convert_hex_to_port_id, get_channel_id_str};
+use crate::{commitment::*, connection_id, proto};
 use crate::{ChannelArgs, ConnectionArgs, PacketArgs};
 
 mod objects;
@@ -159,12 +159,13 @@ pub fn handle_msg_connection_open_ack<C: Client>(
     }
 
     // Verify counterparty connection state.
+    let client_id = new_args.client_id();
     let expected = proto::connection::ConnectionEnd {
         state: proto::connection::State::Tryopen as _,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            client_id: new_args.client_id(),
-            connection_id: format!("connection-{conn_idx}"),
+            connection_id: connection_id(&client_id, conn_idx),
+            client_id,
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
             }),
@@ -208,13 +209,15 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
+    let client_id = new_args.client_id();
+
     // Verify counterparty state.
     let expected = proto::connection::ConnectionEnd {
         state: proto::connection::State::Open as _,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            client_id: new_args.client_id(),
-            connection_id: format!("connection-{conn_idx}"),
+            connection_id: connection_id(&client_id, conn_idx),
+            client_id,
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
             }),
@@ -259,7 +262,7 @@ pub fn handle_channel_open_init_and_try<C: Client>(
     if channel_args.connection() != old_connection_args
         || channel_args.open
         || channel_args.channel_id != channel.number
-        || channel_args.port_id != convert_hex_to_port_id(&channel.port_id)?
+        || hex::encode(channel_args.port_id) != channel.port_id
     {
         return Err(VerifyError::WrongChannelArgs);
     }
@@ -268,19 +271,30 @@ pub fn handle_channel_open_init_and_try<C: Client>(
         MsgType::MsgChannelOpenInit => {
             let init_msg = decode::<MsgChannelOpenInit>(&envelop.content)
                 .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_init(client, &new_connections, channel, init_msg)
+            handle_msg_channel_open_init(
+                &new_connection_args.client_id(),
+                &new_connections,
+                channel,
+                init_msg,
+            )
         }
         MsgType::MsgChannelOpenTry => {
             let open_try_msg = decode::<MsgChannelOpenTry>(&envelop.content)
                 .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_try(client, &new_connections, channel, open_try_msg)
+            handle_msg_channel_open_try(
+                client,
+                &new_connection_args.client_id(),
+                &new_connections,
+                channel,
+                open_try_msg,
+            )
         }
         _ => Err(VerifyError::EventNotMatch),
     }
 }
 
-pub fn handle_msg_channel_open_init<C: Client>(
-    _client: C,
+pub fn handle_msg_channel_open_init(
+    client_id: &str,
     ibc_connections: &IbcConnections,
     new: IbcChannel,
     _msg: MsgChannelOpenInit,
@@ -288,11 +302,9 @@ pub fn handle_msg_channel_open_init<C: Client>(
     if new.connection_hops.len() != 1 {
         return Err(VerifyError::ConnectionsWrong);
     }
-    let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
     let conn = ibc_connections
-        .connections
-        .get(conn_id)
-        .ok_or(VerifyError::WrongConnectionnNumber)?;
+        .get_by_id(client_id, &new.connection_hops[0])
+        .ok_or(VerifyError::WrongConnectionId)?;
 
     if conn.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
@@ -315,6 +327,7 @@ pub fn handle_msg_channel_open_init<C: Client>(
 
 pub fn handle_msg_channel_open_try<C: Client>(
     client: C,
+    client_id: &str,
     ibc_connections: &IbcConnections,
     new: IbcChannel,
     msg: MsgChannelOpenTry,
@@ -322,11 +335,10 @@ pub fn handle_msg_channel_open_try<C: Client>(
     if new.connection_hops.len() != 1 {
         return Err(VerifyError::ConnectionsWrong);
     }
-    let conn_id = convert_connection_id_to_index(&new.connection_hops[0])?;
+
     let conn = ibc_connections
-        .connections
-        .get(conn_id)
-        .ok_or(VerifyError::WrongConnectionnNumber)?;
+        .get_by_id(client_id, &new.connection_hops[0])
+        .ok_or(VerifyError::WrongConnectionId)?;
 
     if conn.state != State::Open {
         return Err(VerifyError::WrongConnectionState);
@@ -589,7 +601,7 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if packet_args.port_id != convert_hex_to_port_id(&ibc_packet.packet.source_port_id)?
+    if hex::encode(packet_args.port_id) != ibc_packet.packet.source_port_id
         || packet_args.sequence != ibc_packet.packet.sequence
         || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
     {
@@ -666,7 +678,7 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if packet_args.port_id != convert_hex_to_port_id(&ibc_packet.packet.destination_port_id)?
+    if hex::encode(packet_args.port_id) != ibc_packet.packet.destination_port_id
         || packet_args.sequence != ibc_packet.packet.sequence
         || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.destination_channel_id
     {

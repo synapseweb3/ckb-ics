@@ -3,6 +3,7 @@ use ethereum_types::H256;
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
+use crate::connection_id;
 use crate::object::{ChannelCounterparty, ConnectionEnd, Ordering, Packet, State, VerifyError};
 use crate::proto::client::Height;
 
@@ -10,6 +11,26 @@ use crate::proto::client::Height;
 pub struct IbcConnections {
     pub next_channel_number: u16,
     pub connections: Vec<ConnectionEnd>,
+}
+
+impl IbcConnections {
+    pub fn get_by_id(&self, client_id: &str, id: &str) -> Option<&ConnectionEnd> {
+        let idx = extract_connection_index(id).ok()?;
+        let expected_id = connection_id(client_id, idx);
+        if id != expected_id {
+            return None;
+        }
+        self.connections.get(idx)
+    }
+}
+
+fn extract_connection_index(connection_id: &str) -> Result<usize, VerifyError> {
+    let index_str = connection_id
+        .split('-')
+        .last()
+        .ok_or(VerifyError::WrongConnectionId)?;
+    let index = index_str.parse().map_err(|_| VerifyError::WrongConnectionId)?;
+    Ok(index)
 }
 
 #[derive(Debug, Clone, RlpDecodable, RlpEncodable, PartialEq, Eq)]
