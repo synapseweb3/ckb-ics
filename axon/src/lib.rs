@@ -47,6 +47,7 @@ pub mod message;
 pub mod object;
 pub mod proto;
 
+use axon_tools::keccak_256;
 use consts::CHANNEL_ID_PREFIX;
 use object::VerifyError;
 
@@ -92,11 +93,7 @@ impl ConnectionArgs {
     }
 
     pub fn client_id(&self) -> String {
-        format!(
-            "{}-{}",
-            hex::encode(&self.metadata_type_id[..20]),
-            hex::encode(self.ibc_handler_address)
-        )
+        hex::encode(&keccak_256(&self.encode())[..20])
     }
 }
 
