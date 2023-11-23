@@ -206,7 +206,7 @@ impl PacketArgs {
 
 pub fn connection_id(client_id: &str, connection_idx: usize) -> String {
     format!(
-        "{}-{}-{}",
+        "{}-{}{}",
         &client_id[..6],
         consts::CONNECTION_ID_PREFIX,
         connection_idx
