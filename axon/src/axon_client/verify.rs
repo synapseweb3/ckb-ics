@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use ethereum_types::U256;
 use rlp::Rlp;
 
@@ -138,36 +139,21 @@ pub fn verify_account_and_storage<T1: AsRef<[u8]>, T2: AsRef<[u8]>>(
     slot: [u8; 32],
     slot_value: [u8; 32],
     storage_proof: &[T2],
-    // True for eth, false for axon.
-    secure_trie: bool,
-    // True for eth, false for axon.
-    slot_value_is_rlp: bool,
 ) -> Result<(), VerifyError> {
     let address_hash = keccak256(address);
-    let account_bytes = verify_mpt(
-        state_root,
-        if secure_trie { &address_hash } else { address },
-        account_proof,
-    )?;
-    // Account is (nonce, balance, storage_root, code_hash).
+    let account_bytes = verify_mpt(state_root, &address_hash, account_proof)?;
+    // Account is (nonce, balance, storage_root, code_hash), so storage root is at index 2.
     let storage_root = Rlp::new(account_bytes).at(2)?.data()?;
 
     let slot_hash = keccak256(&slot);
-    let slot_value_rlp = rlp::encode(&U256::from(&slot_value));
-    let trie_value = verify_mpt(
-        storage_root,
-        if secure_trie { &slot_hash } else { &slot },
-        storage_proof,
-    )?;
+    let expected_trie_value = if slot_value != [0; 32] {
+        rlp::encode(&U256::from(&slot_value)).freeze()
+    } else {
+        Bytes::new()
+    };
+    let trie_value = verify_mpt(storage_root, &slot_hash, storage_proof)?;
 
-    // Trie value should be rlp(slot value) for eth and just slot value for axon.
-    if trie_value
-        != if slot_value_is_rlp {
-            &slot_value_rlp[..]
-        } else {
-            &slot_value
-        }
-    {
+    if trie_value != expected_trie_value {
         return Err(VerifyError::Mpt);
     }
 
@@ -224,25 +210,6 @@ mod tests {
             commitment_slot(b"abc"),
             keccak256(b"def"),
             &[hex::decode("f844a1201663f081233a2f6d2dc07d9801a0a4bd2608df182782575baee276e196bad7aea1a034607c9bbfeb9c23509680f04363f298fdb0b5f9abe327304ecd1daca08cda9c").unwrap()],
-            true,
-            true,
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn test_verify_commitment_axon() {
-        // Test with eth_getProof result from axon.
-        let account_proof = ["0xf901b1a03efb0a66a281ecb89ba896d8481247a3fb982f80501d9b2ec9aee7521e85fbf6a063017aec481298bbc5df01d044f2a85b25f35f565864f285f88355b48332e07da0b01d7c543eaa8e9ae61ef41d6a73e4bc00010807523108be4146c01fb2812163a011deb9627b74106f9b5a605e9a5d7982e217ab4fde0acd3cf40def901047037380a0308ee020f264fd833e26f3107080cc1e0941def4b7fea0bac8780bf08ac7676d80a06cd5cbddd2b22b17026df25fe3153d555656298115795903ecaa813684bc21e7a020c241536e17c8bf762301ed5f3d5c24f3418899f3a187fcd4f67ac8b4b8590aa0efae555d4e1d9d4d2ccfc97ac91098cca67cc39d858d0511f9fb8ec7804dc8d7a01d65e6a5eb57de1c0b7990e75ed2f39ecb56ed7b18182d00ada8f2088893c32c80a0845374c9aa55f45e39fefa6fa494dc33cea3e7eabcf2bebd552d50792e26f77ea024fbdae3ac0338e7b0c62b02e796355028f4ba0059d9db57879a00b5d997a5a5a0d2735e1e1e71452f84ef82337c6d278ab0782f2cc702f3695006ca9b8f7aaa38a0af24ea5718cef55e8845d018deaf05b0b6ae00caa898fed93ae7965c7535121580","0xf85d943165878a594ca255338adfa4d48449f69242eb8fb846f8440180a03ac4f68b6978592f42576a123c908864c4e4e47301cb8e11e75c838807ca6346a0c09715ef7e413bd06144c8c6dd476b1901eb2e29c6826f3c7a2b2e1834887c0a"];
-        verify_account_and_storage(
-            &hex::decode("03d7a4396087506f9c3135123cd45dc283b2b376fde28839df7cb7eb93ad0133").unwrap(),
-            &hex::decode("0165878A594ca255338adfa4d48449f69242Eb8F").unwrap(),
-            &Vec::from_iter(account_proof.iter().map(|p| hex::decode(&p[2..]).unwrap())),
-            commitment_slot(b"abc"),
-            keccak256(b"def"),
-            &[hex::decode("f843a1200d4296a21c97b0dcb7b57560158cf9656e6090259d85f0fcf67e395bf96c83e7a034607c9bbfeb9c23509680f04363f298fdb0b5f9abe327304ecd1daca08cda9c").unwrap()],
-            false,
-            false,
         )
         .unwrap();
     }

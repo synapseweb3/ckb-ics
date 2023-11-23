@@ -76,8 +76,6 @@ impl Client for AxonClient {
             commitment_slot(path),
             keccak256(value),
             &storage_proof,
-            false,
-            false,
         )?;
 
         Ok(())
