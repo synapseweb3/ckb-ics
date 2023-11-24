@@ -337,7 +337,8 @@ fn test_handle_msg_channel_open_ack_failed() {
     let client_id = ConnectionArgs {
         metadata_type_id: new_args.metadata_type_id,
         ibc_handler_address: new_args.ibc_handler_address,
-    }.client_id();
+    }
+    .client_id();
 
     let client = TestClient::default();
     let old_channel = IbcChannel {

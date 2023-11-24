@@ -53,13 +53,10 @@ impl Client for AxonClient {
         } = rlp::decode(proof).map_err(|_| VerifyError::SerdeError)?;
 
         let block_state_root = block.header.state_root;
-        assert_eq!(
-            height,
-            Height {
-                revision_number: 0,
-                revision_height: block.header.number,
-            }
-        );
+
+        if height.revision_height != block.header.number {
+            return Err(VerifyError::Mpt);
+        }
 
         axon_tools::verify_proof(
             block,
@@ -83,10 +80,16 @@ impl Client for AxonClient {
 }
 
 impl AxonClient {
-    pub fn new(ibc_handler_address: [u8; 20], metadata_cell_data: &[u8]) -> Result<Self, VerifyError> {
-        let metadata_cell_data =
-            MetadataCellDataReader::from_slice(metadata_cell_data).map_err(|_| VerifyError::SerdeError)?;
-        let metadata = metadata_cell_data.metadata().get(0).ok_or(VerifyError::SerdeError)?;
+    pub fn new(
+        ibc_handler_address: [u8; 20],
+        metadata_cell_data: &[u8],
+    ) -> Result<Self, VerifyError> {
+        let metadata_cell_data = MetadataCellDataReader::from_slice(metadata_cell_data)
+            .map_err(|_| VerifyError::SerdeError)?;
+        let metadata = metadata_cell_data
+            .metadata()
+            .get(0)
+            .ok_or(VerifyError::SerdeError)?;
         let mut validators: Vec<ValidatorExtend> = Vec::new();
         for v in metadata.validators().iter() {
             let bls_pub_key = v.bls_pub_key().raw_data().to_vec();

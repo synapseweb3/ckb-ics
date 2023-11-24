@@ -29,7 +29,9 @@ fn extract_connection_index(connection_id: &str) -> Result<usize, VerifyError> {
         .split('-')
         .last()
         .ok_or(VerifyError::WrongConnectionId)?;
-    let index = index_str.parse().map_err(|_| VerifyError::WrongConnectionId)?;
+    let index = index_str
+        .parse()
+        .map_err(|_| VerifyError::WrongConnectionId)?;
     Ok(index)
 }
 
