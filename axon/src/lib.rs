@@ -74,7 +74,7 @@ macro_rules! try_read_last {
 }
 
 // The args of the connection cell's script
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct ConnectionArgs {
     pub metadata_type_id: [u8; 32],
     pub ibc_handler_address: [u8; 20],
@@ -98,7 +98,7 @@ impl ConnectionArgs {
 }
 
 // The args of the channel cell's script
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct ChannelArgs {
     pub metadata_type_id: [u8; 32],
     pub ibc_handler_address: [u8; 20],
@@ -107,7 +107,7 @@ pub struct ChannelArgs {
     // frequently.
     pub open: bool,
     // Relayer will search the specified channel by channel id and port id
-    pub channel_id: u16,
+    pub channel_id: u64,
     pub port_id: [u8; 32],
 }
 
@@ -124,9 +124,17 @@ impl ChannelArgs {
             metadata_type_id: *try_read!(slice, 32),
             ibc_handler_address: *try_read!(slice, 20),
             open: try_read!(slice, 1) != &[0],
-            channel_id: u16::from_le_bytes(*try_read!(slice, 2)),
+            channel_id: u64::from_le_bytes(*try_read!(slice, 8)),
             port_id: *try_read_last!(slice, 32),
         })
+    }
+
+    pub fn channel_id_str(&self) -> String {
+        format!("{CHANNEL_ID_PREFIX}{}", self.channel_id)
+    }
+
+    pub fn port_id_str(&self) -> String {
+        hex::encode(self.port_id)
     }
 
     pub fn get_prefix_for_searching_unopen(&self) -> Vec<u8> {
@@ -163,25 +171,27 @@ impl ChannelArgs {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct PacketArgs {
-    pub channel_id: u16,
+    pub channel_id: u64,
     pub port_id: [u8; 32], // mark as owner_lockhash
-    pub sequence: u16,
+    pub sequence: u64,
 }
 
 impl PacketArgs {
-    pub fn from_slice(slice: &[u8]) -> Result<Self, VerifyError> {
-        if slice.len() != 36 {
-            return Err(VerifyError::WrongPacketArgs);
+    pub fn is_channel(&self, channel: &ChannelArgs) -> Result<(), VerifyError> {
+        if channel.channel_id != self.channel_id || channel.port_id != self.port_id {
+            Err(VerifyError::WrongPacketArgs)
+        } else {
+            Ok(())
         }
-        let channel_id = u16::from_le_bytes(slice[0..2].try_into().unwrap());
-        let port_id = slice[2..34].try_into().unwrap();
-        let sequence = u16::from_le_bytes(slice[34..36].try_into().unwrap());
-        Ok(PacketArgs {
-            channel_id,
-            port_id,
-            sequence,
+    }
+
+    pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
+        Ok(Self {
+            channel_id: u64::from_le_bytes(*try_read!(slice, 8)),
+            port_id: *try_read!(slice, 32),
+            sequence: u64::from_le_bytes(*try_read_last!(slice, 8)),
         })
     }
 
@@ -213,8 +223,34 @@ pub fn connection_id(client_id: &str, connection_idx: usize) -> String {
     )
 }
 
-pub fn get_channel_id_str(idx: u16) -> String {
-    format!("{CHANNEL_ID_PREFIX}{}", idx)
+pub trait WriteOrVerifyCommitments {
+    fn write_no_commitment(&mut self) -> Result<(), VerifyError> {
+        self.write_commitments::<String, Vec<u8>>([])
+    }
+
+    fn write_commitments<K, V>(
+        &mut self,
+        kvs: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<(), VerifyError>
+    where
+        K: AsRef<[u8]>,
+        V: AsRef<[u8]>;
+}
+
+impl<T> WriteOrVerifyCommitments for &mut T
+where
+    T: WriteOrVerifyCommitments,
+{
+    fn write_commitments<K, V>(
+        &mut self,
+        kvs: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<(), VerifyError>
+    where
+        K: AsRef<[u8]>,
+        V: AsRef<[u8]>,
+    {
+        T::write_commitments(self, kvs)
+    }
 }
 
 #[cfg(test)]
@@ -230,7 +266,7 @@ mod tests {
             channel_id: 23,
             port_id: [2; 32],
         };
-        let slice = channel_args.clone().to_args();
+        let slice = channel_args.to_args();
         let actual = ChannelArgs::from_slice(&slice).unwrap();
         assert_eq!(channel_args, actual);
     }

@@ -1,7 +1,7 @@
 use crate::consts::COMMITMENT_PREFIX;
-use crate::get_channel_id_str;
 use crate::proto;
 use crate::Bytes;
+use crate::ChannelArgs;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -46,6 +46,7 @@ pub enum VerifyError {
     WrongPacketArgs,
     WrongPacketAck,
 
+    Commitment = 98,
     Mpt = 99,
 }
 
@@ -71,10 +72,30 @@ impl_enum_rlp!(
         OpenTry,
         Open,
         Closed,
-        Frozen,
     },
     u8
 );
+
+impl State {
+    pub fn proto_connection_state(self) -> proto::connection::State {
+        match self {
+            State::Init => proto::connection::State::Init,
+            State::OpenTry => proto::connection::State::Tryopen,
+            State::Open => proto::connection::State::Open,
+            _ => proto::connection::State::UninitializedUnspecified,
+        }
+    }
+
+    pub fn proto_channel_state(self) -> proto::channel::State {
+        match self {
+            State::Init => proto::channel::State::Init,
+            State::OpenTry => proto::channel::State::Tryopen,
+            State::Open => proto::channel::State::Open,
+            State::Closed => proto::channel::State::Closed,
+            _ => proto::channel::State::UninitializedUnspecified,
+        }
+    }
+}
 
 impl_enum_rlp!(
     #[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
@@ -124,7 +145,7 @@ pub struct ChannelCounterparty {
 
 #[derive(Clone, PartialEq, Eq, RlpEncodable, RlpDecodable, Debug)]
 pub struct Packet {
-    pub sequence: u16,
+    pub sequence: u64,
     pub source_port_id: String,
     pub source_channel_id: String,
     pub destination_port_id: String,
@@ -138,10 +159,10 @@ impl Default for Packet {
     fn default() -> Self {
         Self {
             sequence: Default::default(),
-            source_port_id: hex::encode([0u8; 32]),
-            source_channel_id: get_channel_id_str(0),
-            destination_port_id: hex::encode([0u8; 32]),
-            destination_channel_id: get_channel_id_str(0),
+            source_port_id: ChannelArgs::default().port_id_str(),
+            source_channel_id: ChannelArgs::default().channel_id_str(),
+            destination_port_id: ChannelArgs::default().port_id_str(),
+            destination_channel_id: ChannelArgs::default().channel_id_str(),
             data: Default::default(),
             timeout_height: 0,
             timeout_timestamp: 0,
@@ -188,6 +209,24 @@ impl Default for ConnectionEnd {
             counterparty: Default::default(),
             delay_period: Default::default(),
             versions: vec![Version::version_1()],
+        }
+    }
+}
+
+impl ConnectionEnd {
+    pub fn to_proto(self, client_id: String) -> proto::connection::ConnectionEnd {
+        proto::connection::ConnectionEnd {
+            state: self.state.proto_connection_state() as i32,
+            counterparty: Some(proto::connection::Counterparty {
+                client_id: self.counterparty.client_id,
+                connection_id: self.counterparty.connection_id,
+                prefix: Some(proto::commitment::MerklePrefix {
+                    key_prefix: self.counterparty.commitment_prefix,
+                }),
+            }),
+            client_id,
+            versions: self.versions.into_iter().map(|v| v.into()).collect(),
+            delay_period: self.delay_period,
         }
     }
 }
