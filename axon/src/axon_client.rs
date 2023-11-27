@@ -44,6 +44,11 @@ impl Client for AxonClient {
         path: &[u8],
         value: &[u8],
     ) -> Result<(), VerifyError> {
+        // Skip verification when ibc_handler_address is zero.
+        if self.ibc_handler_address == [0; 20] {
+            return Ok(());
+        }
+
         let AxonCommitmentProof {
             block,
             previous_state_root,
@@ -84,6 +89,11 @@ impl AxonClient {
         ibc_handler_address: [u8; 20],
         metadata_cell_data: &[u8],
     ) -> Result<Self, VerifyError> {
+        // Skip verification when ibc_handler_address is zero.
+        if ibc_handler_address == [0; 20] {
+            return Ok(Self::default());
+        }
+
         let metadata_cell_data = MetadataCellDataReader::from_slice(metadata_cell_data)
             .map_err(|_| VerifyError::SerdeError)?;
         let metadata = metadata_cell_data
