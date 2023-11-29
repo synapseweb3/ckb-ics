@@ -1,20 +1,38 @@
-use alloc::{collections::BTreeSet, string::String, vec::Vec};
+use alloc::{string::String, vec::Vec};
 use ethereum_types::H256;
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
-use crate::convert_byte32_to_hex;
-use crate::object::{
-    ChannelCounterparty, ConnectionEnd, Object, Ordering, Packet, State, VerifyError,
-};
-use crate::proof::ObjectProof;
+use crate::connection_id;
+use crate::object::{ChannelCounterparty, ConnectionEnd, Ordering, Packet, State, VerifyError};
+use crate::proto::client::Height;
 
-#[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable)]
+#[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable, PartialEq, Eq)]
 pub struct IbcConnections {
-    // TODO: can this be removed?
-    pub next_connection_number: u16,
     pub next_channel_number: u16,
     pub connections: Vec<ConnectionEnd>,
+}
+
+impl IbcConnections {
+    pub fn get_by_id(&self, client_id: &str, id: &str) -> Option<&ConnectionEnd> {
+        let idx = extract_connection_index(id).ok()?;
+        let expected_id = connection_id(client_id, idx);
+        if id != expected_id {
+            return None;
+        }
+        self.connections.get(idx)
+    }
+}
+
+fn extract_connection_index(connection_id: &str) -> Result<usize, VerifyError> {
+    let index_str = connection_id
+        .split('-')
+        .last()
+        .ok_or(VerifyError::WrongConnectionId)?;
+    let index = index_str
+        .parse()
+        .map_err(|_| VerifyError::WrongConnectionId)?;
+    Ok(index)
 }
 
 #[derive(Debug, Clone, RlpDecodable, RlpEncodable, PartialEq, Eq)]
@@ -29,62 +47,25 @@ pub struct IbcChannel {
     pub sequence: Sequence,
     pub counterparty: ChannelCounterparty,
     pub connection_hops: Vec<String>,
+    pub version: String,
 }
 
 impl Default for IbcChannel {
     fn default() -> Self {
         Self {
             number: Default::default(),
-            port_id: convert_byte32_to_hex(&[0u8; 32]),
+            port_id: hex::encode([0u8; 32]),
             state: Default::default(),
             order: Default::default(),
             sequence: Default::default(),
             counterparty: Default::default(),
             connection_hops: Default::default(),
+            version: Default::default(),
         }
     }
 }
 
-impl IbcChannel {
-    pub fn equal_unless_state(&self, other: &Self) -> bool {
-        (
-            self.number,
-            &self.port_id,
-            self.order,
-            &self.sequence,
-            &self.counterparty,
-        ) == (
-            other.number,
-            &other.port_id,
-            other.order,
-            &other.sequence,
-            &other.counterparty,
-        )
-    }
-
-    pub fn equal_unless_state_and_counterparty(&self, other: &Self) -> bool {
-        (self.number, &self.port_id, self.order, &self.sequence)
-            == (other.number, &other.port_id, other.order, &other.sequence)
-    }
-
-    pub fn equal_unless_sequence(&self, other: &Self) -> bool {
-        (
-            self.number,
-            &self.port_id,
-            self.order,
-            self.state,
-            &self.counterparty,
-        ) == (
-            other.number,
-            &other.port_id,
-            other.order,
-            other.state,
-            &other.counterparty,
-        )
-    }
-}
-
-#[derive(RlpEncodable, RlpDecodable, Debug, Clone)]
+#[derive(RlpEncodable, RlpDecodable, Debug, Clone, PartialEq, Eq)]
 pub struct IbcPacket {
     pub packet: Packet,
     pub tx_hash: Option<H256>,
@@ -104,91 +85,64 @@ impl_enum_rlp! {
     u8
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, RlpEncodable, RlpDecodable)]
+#[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct Sequence {
     pub next_sequence_sends: u16,
     pub next_sequence_recvs: u16,
     pub next_sequence_acks: u16,
+    /// Received sequences for unordered channel. Must be ordered.
     pub received_sequences: Vec<u16>,
 }
 
+impl Default for Sequence {
+    fn default() -> Self {
+        Self {
+            next_sequence_sends: 1,
+            next_sequence_recvs: 1,
+            next_sequence_acks: 1,
+            received_sequences: vec![],
+        }
+    }
+}
+
 impl Sequence {
-    pub fn next_send_packet_is(&self, new: &Self) -> bool {
-        if self.next_sequence_sends + 1 != new.next_sequence_sends
-            || self.next_sequence_recvs != new.next_sequence_recvs
-            || self.next_sequence_acks != new.next_sequence_acks
-        {
-            return false;
-        }
-
-        let old_received = self.received_sequences.iter().collect::<BTreeSet<_>>();
-        let new_received = new.received_sequences.iter().collect::<BTreeSet<_>>();
-
-        if old_received.len() != self.received_sequences.len()
-            || new_received.len() != new.received_sequences.len()
-            || old_received != new_received
-        {
-            return false;
-        }
-
-        true
-    }
-
-    pub fn next_recv_packet_is(&self, new: &Self, unorder_sequence: Option<u16>) -> bool {
-        if self.next_sequence_sends != new.next_sequence_sends
-            || self.next_sequence_acks != new.next_sequence_acks
-        {
-            return false;
-        }
-
-        if let Some(sequence) = unorder_sequence {
-            let old_received = self.received_sequences.iter().collect::<BTreeSet<_>>();
-            let new_received = new.received_sequences.iter().collect::<BTreeSet<_>>();
-
-            if old_received.len() != self.received_sequences.len()
-                || new_received.len() != new.received_sequences.len()
-                || new_received.len() != old_received.len() + 1
-            {
-                return false;
+    pub fn unorder_receive(&mut self, seq: u16) -> Result<(), VerifyError> {
+        match self.received_sequences.binary_search(&seq) {
+            Ok(_) => Err(VerifyError::WrongPacketSequence),
+            Err(idx) => {
+                self.received_sequences.insert(idx, seq);
+                Ok(())
             }
-
-            if old_received.contains(&sequence) || !new_received.contains(&sequence) {
-                return false;
-            }
-        } else if self.next_sequence_recvs + 1 != new.next_sequence_recvs {
-            return false;
         }
-
-        true
-    }
-
-    pub fn next_recv_ack_is(&self, new: &Self, is_unorder: bool) -> bool {
-        if self.next_sequence_sends != new.next_sequence_sends
-            || self.next_sequence_recvs != new.next_sequence_recvs
-        {
-            return false;
-        }
-
-        if !is_unorder && self.next_sequence_acks + 1 != new.next_sequence_acks {
-            return false;
-        }
-
-        let old_received = self.received_sequences.iter().collect::<BTreeSet<_>>();
-        let new_received = new.received_sequences.iter().collect::<BTreeSet<_>>();
-
-        if old_received.len() != self.received_sequences.len()
-            || new_received.len() != new.received_sequences.len()
-            || old_received != new_received
-        {
-            return false;
-        }
-
-        true
     }
 }
 
 pub trait Client {
-    fn client_id(&self) -> &[u8; 32];
+    fn verify_membership(
+        &self,
+        height: Height,
+        // delay_time_period: u64,
+        // delay_block_period: u64,
+        proof: &[u8],
+        // Assume prefix is always "ibc". This is true for axon and ckb.
+        // prefix: &[u8],
+        path: &[u8],
+        value: &[u8],
+    ) -> Result<(), VerifyError>;
+}
 
-    fn verify_object<O: Object>(&mut self, obj: O, proof: ObjectProof) -> Result<(), VerifyError>;
+#[cfg(test)]
+mod tests {
+    use super::Sequence;
+
+    #[test]
+    fn test_unorder_receive() {
+        let mut s = Sequence::default();
+        s.unorder_receive(3).unwrap();
+        s.unorder_receive(5).unwrap();
+        s.unorder_receive(1).unwrap();
+        s.unorder_receive(2).unwrap();
+        assert!(s.unorder_receive(3).is_err());
+        assert_eq!(s.received_sequences, [1, 2, 3, 5]);
+    }
 }

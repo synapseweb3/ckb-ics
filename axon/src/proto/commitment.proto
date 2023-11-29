@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package commitment;
+
+// MerklePrefix is merkle path prefixed to the key.
+// The constructed key from the Path and the key will be append(Path.KeyPath,
+// append(Path.KeyPrefix, key...))
+message MerklePrefix {
+  bytes key_prefix = 1;
+}

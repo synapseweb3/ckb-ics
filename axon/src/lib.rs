@@ -1,10 +1,8 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![allow(clippy::result_unit_err)]
 
 #[macro_use]
 extern crate alloc;
-
-use core::str::FromStr;
 
 use alloc::string::String;
 pub use alloc::vec::Vec;
@@ -41,48 +39,69 @@ macro_rules! impl_enum_rlp {
     }
 }
 
+pub mod axon_client;
+pub mod commitment;
 pub mod consts;
 pub mod handler;
 pub mod message;
 pub mod object;
-pub mod proof;
-pub mod verify_mpt;
+pub mod proto;
 
+use axon_tools::keccak_256;
 use consts::CHANNEL_ID_PREFIX;
-use ethereum_types::H256;
-use object::{Object, VerifyError};
-use proof::TransactionReceipt;
-use rlp::{Encodable, RlpStream};
-use verify_mpt::verify_proof;
+use object::VerifyError;
 
 pub type U256 = Vec<u8>;
 pub type Bytes = Vec<u8>;
 
+macro_rules! try_read {
+    ($buf:ident, $len:literal) => {{
+        let x: &[u8; $len] = $buf.get(..$len).ok_or(())?.try_into().unwrap();
+        $buf = &$buf[$len..];
+        x
+    }};
+}
+
+macro_rules! try_read_last {
+    ($buf:ident, $len:literal) => {{
+        let x: &[u8; $len] = $buf.get(..$len).ok_or(())?.try_into().unwrap();
+        $buf = &$buf[$len..];
+        if !$buf.is_empty() {
+            return Err(());
+        }
+        x
+    }};
+}
+
 // The args of the connection cell's script
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ConnectionArgs {
-    pub client_id: [u8; 32],
+    pub metadata_type_id: [u8; 32],
+    pub ibc_handler_address: [u8; 20],
 }
 
 impl ConnectionArgs {
-    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
-        if slice.len() != 32 {
-            return Err(());
-        }
-        Ok(ConnectionArgs {
-            client_id: slice[0..32].try_into().unwrap(),
+    pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
+        Ok(Self {
+            metadata_type_id: *try_read!(slice, 32),
+            ibc_handler_address: *try_read_last!(slice, 20),
         })
     }
 
-    pub fn get_client_id(slice: &[u8]) -> &[u8] {
-        &slice[0..32]
+    pub fn encode(&self) -> Vec<u8> {
+        [&self.metadata_type_id[..], &self.ibc_handler_address].concat()
+    }
+
+    pub fn client_id(&self) -> String {
+        hex::encode(&keccak_256(&self.encode())[..20])
     }
 }
 
 // The args of the channel cell's script
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct ChannelArgs {
-    pub client_id: [u8; 32],
+    pub metadata_type_id: [u8; 32],
+    pub ibc_handler_address: [u8; 20],
     // For the sake of convenience, we use a bool here to describe
     // whether this channel is open. Relayer search the the unopen channel cell
     // frequently.
@@ -93,35 +112,38 @@ pub struct ChannelArgs {
 }
 
 impl ChannelArgs {
-    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
-        if slice.len() != 67 {
-            return Err(());
+    pub fn connection(&self) -> ConnectionArgs {
+        ConnectionArgs {
+            metadata_type_id: self.metadata_type_id,
+            ibc_handler_address: self.ibc_handler_address,
         }
-        let client_id: [u8; 32] = slice[0..32].try_into().unwrap();
-        let open = slice.get(32).unwrap() > &0;
-        let channel_id = u16::from_le_bytes(slice[33..35].try_into().unwrap());
-        let port_id: [u8; 32] = slice[35..67].try_into().unwrap();
-        Ok(ChannelArgs {
-            client_id,
-            open,
-            channel_id,
-            port_id,
+    }
+
+    pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
+        Ok(Self {
+            metadata_type_id: *try_read!(slice, 32),
+            ibc_handler_address: *try_read!(slice, 20),
+            open: try_read!(slice, 1) != &[0],
+            channel_id: u16::from_le_bytes(*try_read!(slice, 2)),
+            port_id: *try_read_last!(slice, 32),
         })
     }
 
     pub fn get_prefix_for_searching_unopen(&self) -> Vec<u8> {
-        let mut result = self.client_id.to_vec();
-        let open: u8 = if self.open { 1 } else { 0 };
-        result.push(open);
-        result
+        [
+            &self.metadata_type_id[..],
+            &self.ibc_handler_address,
+            &if self.open { [1] } else { [0] },
+        ]
+        .concat()
     }
 
     pub fn get_prefix_for_all(&self) -> Vec<u8> {
-        self.client_id.to_vec()
+        [&self.metadata_type_id[..], &self.ibc_handler_address].concat()
     }
 
     pub fn is_open(data: Vec<u8>) -> Result<bool, ()> {
-        let open_byte = data.get(33).ok_or(())?;
+        let open_byte = data.get(32 + 20 + 1).ok_or(())?;
         if *open_byte == 1 {
             Ok(true)
         } else {
@@ -130,10 +152,14 @@ impl ChannelArgs {
     }
 
     pub fn to_args(self) -> Vec<u8> {
-        let mut result = self.get_prefix_for_searching_unopen();
-        result.extend(self.channel_id.to_le_bytes());
-        result.extend(self.port_id);
-        result
+        [
+            &self.metadata_type_id[..],
+            &self.ibc_handler_address,
+            &if self.open { [1] } else { [0] },
+            &self.channel_id.to_le_bytes(),
+            &self.port_id,
+        ]
+        .concat()
     }
 }
 
@@ -178,86 +204,13 @@ impl PacketArgs {
     }
 }
 
-pub fn verify_message<O: Object>(
-    receipt_root: H256,
-    receipt: TransactionReceipt,
-    object: O,
-    receipt_proof: Vec<Vec<u8>>,
-) -> Result<(), VerifyError> {
-    if let Some(first) = receipt.logs.first() {
-        if object.encode() != first.data.as_ref() {
-            return Err(VerifyError::InvalidReceiptProof);
-        }
-    } else {
-        return Err(VerifyError::InvalidReceiptProof);
-    }
-    let idx = receipt.transaction_index.as_u64();
-    verify_receipt(object, receipt, receipt_root, receipt_proof, idx)
-}
-
-fn verify_receipt<O: Object>(
-    expect: O,
-    receipt: TransactionReceipt,
-    root: H256,
-    proof: Vec<Vec<u8>>,
-    idx: u64,
-) -> Result<(), VerifyError> {
-    let actual = receipt.logs.first().ok_or(VerifyError::FoundNoMessage)?;
-
-    if expect.encode() != actual.data.as_ref() {
-        return Err(VerifyError::EventNotMatch);
-    }
-
-    let key: Vec<u8> = rlp::encode(&idx).as_ref().into();
-
-    if verify_proof(&proof, root.as_ref(), &key, receipt.rlp_bytes().as_ref()) {
-        Ok(())
-    } else {
-        Err(VerifyError::InvalidReceiptProof)
-    }
-}
-
-pub fn rlp_opt<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
-    if let Some(inner) = opt {
-        rlp.append(inner);
-    } else {
-        rlp.append(&"");
-    }
-}
-
-pub fn rlp_opt_list<T: Encodable>(rlp: &mut RlpStream, opt: &Option<T>) {
-    if let Some(inner) = opt {
-        rlp.append(inner);
-    } else {
-        // Choice of `u8` type here is arbitrary as all empty lists are encoded the same.
-        rlp.append_list::<u8, u8>(&[]);
-    }
-}
-
-pub fn convert_byte32_to_hex(bytes32: &[u8; 32]) -> String {
-    format!("{:x}", H256::from(bytes32))
-}
-
-pub fn convert_hex_to_client_id(s: &str) -> Result<[u8; 32], VerifyError> {
-    Ok(H256::from_str(s)
-        .map_err(|_| VerifyError::WrongClient)?
-        .into())
-}
-
-pub fn convert_hex_to_port_id(s: &str) -> Result<[u8; 32], VerifyError> {
-    Ok(H256::from_str(s)
-        .map_err(|_| VerifyError::WrongPortId)?
-        .into())
-}
-
-// ConnectionId example: xxxxxx-connection-0, `xxxxxx` is the prefix of hex encoded ClientId
-pub fn convert_connection_id_to_index(connection_id: &str) -> Result<usize, VerifyError> {
-    let index_str = connection_id
-        .split('-')
-        .last()
-        .ok_or(VerifyError::WrongConnectionId)?;
-    let index = usize::from_str(index_str).map_err(|_| VerifyError::WrongConnectionId)?;
-    Ok(index)
+pub fn connection_id(client_id: &str, connection_idx: usize) -> String {
+    format!(
+        "{}-{}{}",
+        &client_id[..6],
+        consts::CONNECTION_ID_PREFIX,
+        connection_idx
+    )
 }
 
 pub fn get_channel_id_str(idx: u16) -> String {
@@ -268,23 +221,11 @@ pub fn get_channel_id_str(idx: u16) -> String {
 mod tests {
     use crate::ChannelArgs;
 
-    use super::{convert_byte32_to_hex, convert_hex_to_client_id};
-
-    #[test]
-    fn client_id_to_string() {
-        let actual = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 32,
-        ];
-        let s = convert_byte32_to_hex(&actual);
-        let r = convert_hex_to_client_id(&s).unwrap();
-        assert_eq!(actual, r);
-    }
-
     #[test]
     fn channel_args_conversion() {
         let channel_args = ChannelArgs {
-            client_id: [1; 32],
+            metadata_type_id: [1; 32],
+            ibc_handler_address: [7; 20],
             open: true,
             channel_id: 23,
             port_id: [2; 32],
