@@ -46,6 +46,7 @@ pub mod handler;
 pub mod message;
 pub mod object;
 pub mod proto;
+pub use axon_tools;
 
 use axon_tools::keccak_256;
 use consts::CHANNEL_ID_PREFIX;
