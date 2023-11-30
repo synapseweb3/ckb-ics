@@ -1,15 +1,17 @@
 use alloc::{string::String, vec::Vec};
-use ethereum_types::H256;
+
 use rlp_derive::RlpDecodable;
 use rlp_derive::RlpEncodable;
 
 use crate::connection_id;
 use crate::object::{ChannelCounterparty, ConnectionEnd, Ordering, Packet, State, VerifyError};
+use crate::proto;
 use crate::proto::client::Height;
+use crate::ChannelArgs;
 
 #[derive(Debug, Default, Clone, RlpDecodable, RlpEncodable, PartialEq, Eq)]
 pub struct IbcConnections {
-    pub next_channel_number: u16,
+    pub next_channel_number: u64,
     pub connections: Vec<ConnectionEnd>,
 }
 
@@ -37,7 +39,7 @@ fn extract_connection_index(connection_id: &str) -> Result<usize, VerifyError> {
 
 #[derive(Debug, Clone, RlpDecodable, RlpEncodable, PartialEq, Eq)]
 pub struct IbcChannel {
-    pub number: u16,
+    pub number: u64,
     pub port_id: String,
     pub state: State,
     pub order: Ordering,
@@ -54,7 +56,7 @@ impl Default for IbcChannel {
     fn default() -> Self {
         Self {
             number: Default::default(),
-            port_id: hex::encode([0u8; 32]),
+            port_id: ChannelArgs::default().port_id_str(),
             state: Default::default(),
             order: Default::default(),
             sequence: Default::default(),
@@ -65,10 +67,24 @@ impl Default for IbcChannel {
     }
 }
 
+impl From<IbcChannel> for proto::channel::Channel {
+    fn from(value: IbcChannel) -> Self {
+        Self {
+            connection_hops: value.connection_hops,
+            counterparty: Some(proto::channel::Counterparty {
+                channel_id: value.counterparty.channel_id,
+                port_id: value.counterparty.port_id,
+            }),
+            version: value.version,
+            state: value.state.proto_channel_state() as i32,
+            ordering: proto::channel::Order::from(value.order) as i32,
+        }
+    }
+}
+
 #[derive(RlpEncodable, RlpDecodable, Debug, Clone, PartialEq, Eq)]
 pub struct IbcPacket {
     pub packet: Packet,
-    pub tx_hash: Option<H256>,
     pub status: PacketStatus,
     pub ack: Option<Vec<u8>>,
 }
@@ -87,11 +103,11 @@ impl_enum_rlp! {
 
 #[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct Sequence {
-    pub next_sequence_sends: u16,
-    pub next_sequence_recvs: u16,
-    pub next_sequence_acks: u16,
+    pub next_sequence_sends: u64,
+    pub next_sequence_recvs: u64,
+    pub next_sequence_acks: u64,
     /// Received sequences for unordered channel. Must be ordered.
-    pub received_sequences: Vec<u16>,
+    pub received_sequences: Vec<u64>,
 }
 
 impl Default for Sequence {
@@ -106,7 +122,7 @@ impl Default for Sequence {
 }
 
 impl Sequence {
-    pub fn unorder_receive(&mut self, seq: u16) -> Result<(), VerifyError> {
+    pub fn unorder_receive(&mut self, seq: u64) -> Result<(), VerifyError> {
         match self.received_sequences.binary_search(&seq) {
             Ok(_) => Err(VerifyError::WrongPacketSequence),
             Err(idx) => {

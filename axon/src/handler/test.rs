@@ -1,6 +1,7 @@
 use alloc::string::String;
 
 use crate::handler::*;
+use crate::message::CommitmentKV;
 use crate::object::ChannelCounterparty;
 use crate::object::ConnectionCounterparty;
 use crate::object::ConnectionEnd;
@@ -24,8 +25,6 @@ impl Client for TestClient {
 
 #[test]
 fn test_handle_msg_connection_open_init() {
-    let client = TestClient::default();
-
     let new_connection_end = ConnectionEnd {
         state: State::Init,
         ..Default::default()
@@ -39,14 +38,12 @@ fn test_handle_msg_connection_open_init() {
 
     let old_args = ConnectionArgs::default();
     let new_args = ConnectionArgs::default();
-    let msg = MsgConnectionOpenInit {};
     handle_msg_connection_open_init(
-        client,
         old_connections,
         old_args,
         new_connections,
         new_args,
-        msg,
+        &mut Vec::new(),
     )
     .unwrap();
 }
@@ -87,6 +84,7 @@ fn test_handle_msg_connection_open_try() {
         old_args,
         new_connections,
         new_args,
+        &mut Vec::new(),
         msg,
     )
     .unwrap();
@@ -145,6 +143,7 @@ fn test_handle_msg_connection_open_ack() {
         old_args,
         new_connections,
         new_args,
+        &mut Vec::new(),
         msg,
     )
     .unwrap();
@@ -207,6 +206,7 @@ fn test_handle_msg_connection_open_confirm() {
         old_args,
         new_connections,
         new_args,
+        &mut Vec::new(),
         msg,
     )
     .unwrap();
@@ -218,22 +218,35 @@ fn test_handle_msg_channel_open_init() {
         state: State::Open,
         ..Default::default()
     };
+    let connection_args = ConnectionArgs::default();
+    let channel_args = ChannelArgs::default();
+
+    let old_connections = IbcConnections {
+        next_channel_number: 0,
+        connections: vec![connection_end.clone()],
+    };
 
     let new_connections = IbcConnections {
         next_channel_number: 1,
         connections: vec![connection_end],
     };
 
-    let client_id = "client-8";
-
     let channel = IbcChannel {
         state: State::Init,
-        connection_hops: vec![connection_id(client_id, 0)],
+        connection_hops: vec![connection_id(&connection_args.client_id(), 0)],
         ..Default::default()
     };
 
-    let msg = MsgChannelOpenInit {};
-    handle_msg_channel_open_init(client_id, &new_connections, channel, msg).unwrap();
+    handle_msg_channel_open_init(
+        old_connections,
+        connection_args,
+        new_connections,
+        connection_args,
+        channel,
+        channel_args,
+        &mut Vec::new(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -245,16 +258,22 @@ fn test_handle_msg_channel_open_try_success() {
         ..Default::default()
     };
 
+    let connection_args = ConnectionArgs::default();
+    let channel_args = ChannelArgs::default();
+
+    let old_connections = IbcConnections {
+        next_channel_number: 0,
+        connections: vec![connection_end.clone()],
+    };
+
     let new_connections = IbcConnections {
         next_channel_number: 1,
         connections: vec![connection_end],
     };
 
-    let client_id = "client-8";
-
     let channel = IbcChannel {
         state: State::OpenTry,
-        connection_hops: vec![connection_id(client_id, 0)],
+        connection_hops: vec![connection_id(&connection_args.client_id(), 0)],
         ..Default::default()
     };
 
@@ -266,7 +285,18 @@ fn test_handle_msg_channel_open_try_success() {
         proof_init: vec![],
     };
 
-    handle_msg_channel_open_try(client, client_id, &new_connections, channel, msg).unwrap()
+    handle_msg_channel_open_try(
+        client,
+        old_connections,
+        connection_args,
+        new_connections,
+        connection_args,
+        channel,
+        channel_args,
+        &mut Vec::new(),
+        msg,
+    )
+    .unwrap()
 }
 
 #[test]
@@ -280,6 +310,12 @@ fn test_handle_msg_channel_open_ack_success() {
             port_id: "portid".to_string(),
             connection_id: "connection-2".to_string(),
         },
+        ..Default::default()
+    };
+
+    let old_channel_args = ChannelArgs::default();
+    let new_channel_args = ChannelArgs {
+        open: true,
         ..Default::default()
     };
 
@@ -301,97 +337,14 @@ fn test_handle_msg_channel_open_ack_success() {
         proof_try: vec![],
     };
 
-    handle_msg_channel_open_ack(client, old_channel, new_channel, msg).unwrap();
-}
-
-#[test]
-fn test_handle_msg_channel_open_ack_failed() {
-    let old_args = ChannelArgs {
-        metadata_type_id: [
-            59, 202, 83, 204, 94, 60, 251, 53, 29, 14, 91, 232, 113, 191, 94, 227, 72, 206, 76,
-            254, 177, 59, 247, 13, 54, 105, 235, 22, 75, 21, 45, 12,
-        ],
-        ibc_handler_address: [7; 20],
-        open: false,
-        channel_id: 0,
-        port_id: [
-            182, 172, 119, 152, 129, 180, 254, 5, 161, 103, 228, 19, 255, 83, 68, 105, 182, 181,
-            246, 192, 109, 149, 228, 197, 35, 235, 41, 69, 216, 94, 212, 80,
-        ],
-    };
-
-    let new_args = ChannelArgs {
-        metadata_type_id: [
-            59, 202, 83, 204, 94, 60, 251, 53, 29, 14, 91, 232, 113, 191, 94, 227, 72, 206, 76,
-            254, 177, 59, 247, 13, 54, 105, 235, 22, 75, 21, 45, 12,
-        ],
-        ibc_handler_address: [7; 20],
-        open: true,
-        channel_id: 0,
-        port_id: [
-            182, 172, 119, 152, 129, 180, 254, 5, 161, 103, 228, 19, 255, 83, 68, 105, 182, 181,
-            246, 192, 109, 149, 228, 197, 35, 235, 41, 69, 216, 94, 212, 80,
-        ],
-    };
-
-    let client_id = ConnectionArgs {
-        metadata_type_id: new_args.metadata_type_id,
-        ibc_handler_address: new_args.ibc_handler_address,
-    }
-    .client_id();
-
-    let client = TestClient::default();
-    let old_channel = IbcChannel {
-        number: 0,
-        port_id: String::from("b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450"),
-        state: State::Init,
-        order: Ordering::Unordered,
-        sequence: Sequence::default(),
-        counterparty: ChannelCounterparty {
-            port_id: String::from(
-                "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
-            ),
-            channel_id: String::from(""),
-            connection_id: "connection-2".into(),
-        },
-        connection_hops: vec![connection_id(&client_id, 0)],
-        version: "".into(),
-    };
-    let new_channel = IbcChannel {
-        number: 0,
-        port_id: String::from("b6ac779881b4fe05a167e413ff534469b6b5f6c06d95e4c523eb2945d85ed450"),
-        state: State::Open,
-        order: Ordering::Unordered,
-        sequence: Sequence::default(),
-        counterparty: ChannelCounterparty {
-            port_id: String::from(
-                "54d043fc84623f7a9f7383e1a332c524f0def68608446fc420316c30dfc00f01",
-            ),
-            channel_id: String::from("channel-1"),
-            connection_id: "connection-2".into(),
-        },
-        connection_hops: vec![connection_id(&client_id, 0)],
-        version: "".into(),
-    };
-
-    let envelope = Envelope {
-        msg_type: MsgType::MsgChannelOpenAck,
-        content: rlp::encode(&MsgChannelOpenAck {
-            proof_height: Height {
-                revision_number: 0,
-                revision_height: 0,
-            },
-            proof_try: vec![],
-        })
-        .to_vec(),
-    };
-    handle_channel_open_ack_and_confirm(
+    handle_msg_channel_open_ack(
         client,
-        envelope,
         old_channel,
-        old_args,
+        old_channel_args,
         new_channel,
-        new_args,
+        new_channel_args,
+        &mut Vec::new(),
+        msg,
     )
     .unwrap();
 }
@@ -410,6 +363,12 @@ fn handle_msg_channel_open_confirm_success() {
         ..Default::default()
     };
 
+    let old_channel_args = ChannelArgs::default();
+    let new_channel_args = ChannelArgs {
+        open: true,
+        ..Default::default()
+    };
+
     let msg = MsgChannelOpenConfirm {
         proof_height: Height {
             revision_number: 0,
@@ -418,13 +377,20 @@ fn handle_msg_channel_open_confirm_success() {
         proof_ack: vec![],
     };
 
-    handle_msg_channel_open_confirm(client, old_channel, new_channel, msg).unwrap();
+    handle_msg_channel_open_confirm(
+        client,
+        old_channel,
+        old_channel_args,
+        new_channel,
+        new_channel_args,
+        &mut Vec::new(),
+        msg,
+    )
+    .unwrap();
 }
 
 #[test]
 fn handle_msg_channel_close_init_success() {
-    let client = TestClient::default();
-
     let old_channel = IbcChannel {
         state: State::Open,
         ..Default::default()
@@ -445,16 +411,18 @@ fn handle_msg_channel_close_init_success() {
         ..Default::default()
     };
 
-    let msg = MsgChannelCloseInit {};
-
-    handle_msg_channel_close_init(client, old_channel, old_args, new_channel, new_args, msg)
-        .unwrap();
+    handle_msg_channel_close_init(
+        old_channel,
+        old_args,
+        new_channel,
+        new_args,
+        &mut Vec::new(),
+    )
+    .unwrap();
 }
 
 #[test]
 fn handle_msg_channel_close_init_failure() {
-    let client = TestClient::default();
-
     let old_channel = IbcChannel {
         state: State::Open,
         ..Default::default()
@@ -475,11 +443,13 @@ fn handle_msg_channel_close_init_failure() {
         ..Default::default()
     };
 
-    let msg = MsgChannelCloseInit {};
-
-    if let Err(VerifyError::WrongChannelArgs) =
-        handle_msg_channel_close_init(client, old_channel, old_args, new_channel, new_args, msg)
-    {
+    if let Err(VerifyError::WrongChannelArgs) = handle_msg_channel_close_init(
+        old_channel,
+        old_args,
+        new_channel,
+        new_args,
+        &mut Vec::new(),
+    ) {
     } else {
         panic!()
     }
@@ -514,8 +484,16 @@ fn handle_msg_channel_close_confirm_success() {
         proof_init: vec![],
     };
 
-    handle_msg_channel_close_confirm(client, old_channel, old_args, new_channel, new_args, msg)
-        .unwrap();
+    handle_msg_channel_close_confirm(
+        client,
+        old_channel,
+        old_args,
+        new_channel,
+        new_args,
+        &mut Vec::new(),
+        msg,
+    )
+    .unwrap();
 }
 
 #[test]
@@ -547,9 +525,15 @@ fn handle_msg_channel_close_confirm_failure() {
         proof_init: vec![],
     };
 
-    if let Err(VerifyError::WrongChannel) =
-        handle_msg_channel_close_confirm(client, old_channel, old_args, new_channel, new_args, msg)
-    {
+    if let Err(VerifyError::WrongChannel) = handle_msg_channel_close_confirm(
+        client,
+        old_channel,
+        old_args,
+        new_channel,
+        new_args,
+        &mut Vec::new(),
+        msg,
+    ) {
     } else {
         panic!()
     }
@@ -570,6 +554,12 @@ fn handle_msg_channel_open_confirm_channel_unmatch() {
         ..Default::default()
     };
 
+    let old_channel_args = ChannelArgs::default();
+    let new_channel_args = ChannelArgs {
+        open: true,
+        ..Default::default()
+    };
+
     let msg = MsgChannelOpenConfirm {
         proof_height: Height {
             revision_number: 0,
@@ -578,9 +568,15 @@ fn handle_msg_channel_open_confirm_channel_unmatch() {
         proof_ack: vec![],
     };
 
-    if let Err(VerifyError::WrongChannel) =
-        handle_msg_channel_open_confirm(client, old_channel, new_channel, msg)
-    {
+    if let Err(VerifyError::WrongChannel) = handle_msg_channel_open_confirm(
+        client,
+        old_channel,
+        old_channel_args,
+        new_channel,
+        new_channel_args,
+        &mut Vec::new(),
+        msg,
+    ) {
     } else {
         panic!()
     }
@@ -588,8 +584,6 @@ fn handle_msg_channel_open_confirm_channel_unmatch() {
 
 #[test]
 fn test_handle_msg_send_packet_success() {
-    let client = TestClient::default();
-
     let mut seq2 = Sequence::default();
     seq2.next_sequence_sends += 1;
 
@@ -602,7 +596,6 @@ fn test_handle_msg_send_packet_success() {
         state: State::Open,
         ..Default::default()
     };
-    let msg = MsgSendPacket {};
 
     let ibc_packet = IbcPacket {
         packet: Packet {
@@ -611,7 +604,6 @@ fn test_handle_msg_send_packet_success() {
             sequence: 1,
             ..Default::default()
         },
-        tx_hash: None,
         status: PacketStatus::Send,
         ack: None,
     };
@@ -624,14 +616,13 @@ fn test_handle_msg_send_packet_success() {
     };
 
     handle_msg_send_packet(
-        client,
         old_channel,
         old_channel_args,
         new_channel,
         new_channel_args,
         ibc_packet,
         packet_args,
-        msg,
+        &mut Vec::new(),
     )
     .unwrap();
 }
@@ -659,7 +650,6 @@ fn test_msg_recv_packet_success() {
             sequence: 1,
             ..Packet::default()
         },
-        tx_hash: None,
         status: PacketStatus::Recv,
         ack: None,
     };
@@ -679,6 +669,7 @@ fn test_msg_recv_packet_success() {
         None,
         ibc_packet,
         packet_args,
+        &mut Vec::new(),
         MsgRecvPacket {
             proof_height: Height {
                 revision_number: 0,
@@ -703,13 +694,11 @@ fn test_msg_ack_outbox_packet_success() {
     let packet = Packet::default();
     let old_ibc_packet = IbcPacket {
         packet: packet.clone(),
-        tx_hash: None,
         status: PacketStatus::Recv,
         ack: None,
     };
     let new_ibc_packet = IbcPacket {
         packet,
-        tx_hash: None,
         status: PacketStatus::WriteAck,
         ack: Some(vec![1]),
     };
@@ -722,7 +711,7 @@ fn test_msg_ack_outbox_packet_success() {
         PacketArgs::default(),
         new_ibc_packet,
         PacketArgs::default(),
-        MsgWriteAckPacket {},
+        &mut Vec::new(),
     )
     .unwrap();
 }
@@ -741,13 +730,11 @@ fn test_msg_write_ack_packet_channel_state_error() {
     let new_packet = old_packet.clone();
     let old_ibc_packet = IbcPacket {
         packet: old_packet,
-        tx_hash: None,
         status: PacketStatus::Recv,
         ack: None,
     };
     let new_ibc_packet = IbcPacket {
         packet: new_packet,
-        tx_hash: None,
         status: PacketStatus::WriteAck,
         ack: Some(vec![1]),
     };
@@ -760,7 +747,7 @@ fn test_msg_write_ack_packet_channel_state_error() {
         PacketArgs::default(),
         new_ibc_packet,
         PacketArgs::default(),
-        MsgWriteAckPacket {},
+        &mut Vec::new(),
     ) {
     } else {
         panic!()
@@ -782,13 +769,11 @@ fn test_msg_ack_outbox_packet_differenct_packet() {
     new_packet.sequence = 1;
     let old_ibc_packet = IbcPacket {
         packet: old_packet,
-        tx_hash: None,
         status: PacketStatus::Recv,
         ack: None,
     };
     let new_ibc_packet = IbcPacket {
         packet: new_packet,
-        tx_hash: None,
         status: PacketStatus::WriteAck,
         ack: None,
     };
@@ -801,7 +786,7 @@ fn test_msg_ack_outbox_packet_differenct_packet() {
         PacketArgs::default(),
         new_ibc_packet,
         PacketArgs::default(),
-        MsgWriteAckPacket {},
+        &mut Vec::new(),
     ) {
     } else {
         panic!()
@@ -814,4 +799,421 @@ fn test_ibc_connection_encode_and_decode() {
     conn.connections.push(ConnectionEnd::default());
     let a = rlp::encode(&conn);
     rlp::decode::<IbcConnections>(&a).unwrap();
+}
+
+struct ClientWithCommitments {
+    commitments: Vec<CommitmentKV>,
+}
+
+fn client_with_commitments(commitments: Vec<CommitmentKV>) -> ClientWithCommitments {
+    ClientWithCommitments { commitments }
+}
+
+impl Client for ClientWithCommitments {
+    fn verify_membership(
+        &self,
+        _height: Height,
+        _proof: &[u8],
+        path: &[u8],
+        value: &[u8],
+    ) -> Result<(), VerifyError> {
+        let expected = CommitmentKV::hash(path, value);
+        if self.commitments.iter().any(|c| *c == expected) {
+            Ok(())
+        } else {
+            Err(VerifyError::Mpt)
+        }
+    }
+}
+
+#[test]
+fn test_connection_commitment_ping_pong() {
+    let a_connections_before_init = IbcConnections::default();
+    let a_args = ConnectionArgs::default();
+    let b_args = ConnectionArgs {
+        metadata_type_id: [3; 32],
+        ibc_handler_address: [4; 20],
+    };
+    let a_connections_after_init = IbcConnections {
+        connections: vec![ConnectionEnd {
+            state: State::Init,
+            counterparty: ConnectionCounterparty {
+                client_id: b_args.client_id(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let mut init_commitments = Vec::new();
+    handle_msg_connection_open_init(
+        a_connections_before_init.clone(),
+        a_args,
+        a_connections_after_init.clone(),
+        a_args,
+        &mut init_commitments,
+    )
+    .unwrap();
+
+    let mut try_commitments = Vec::new();
+    let b_connections_after_try = IbcConnections {
+        connections: vec![ConnectionEnd {
+            state: State::OpenTry,
+            counterparty: ConnectionCounterparty {
+                client_id: a_args.client_id(),
+                connection_id: connection_id(&a_args.client_id(), 0),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    handle_msg_connection_open_try(
+        client_with_commitments(init_commitments),
+        a_connections_before_init.clone(),
+        b_args,
+        b_connections_after_try.clone(),
+        b_args,
+        &mut try_commitments,
+        MsgConnectionOpenTry {
+            proof_height: Height::default(),
+            proof_init: vec![],
+        },
+    )
+    .unwrap();
+
+    let mut ack_commitments = Vec::new();
+    let a_connection_after_ack = IbcConnections {
+        connections: vec![ConnectionEnd {
+            state: State::Open,
+            counterparty: ConnectionCounterparty {
+                client_id: b_args.client_id(),
+                connection_id: connection_id(&b_args.client_id(), 0),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    handle_msg_connection_open_ack(
+        client_with_commitments(try_commitments),
+        a_connections_after_init.clone(),
+        a_args,
+        a_connection_after_ack,
+        a_args,
+        &mut ack_commitments,
+        MsgConnectionOpenAck {
+            conn_id_on_a: 0,
+            proof_height: Height::default(),
+            proof_try: vec![],
+        },
+    )
+    .unwrap();
+
+    let b_connections_after_confirm = IbcConnections {
+        connections: vec![ConnectionEnd {
+            state: State::Open,
+            counterparty: ConnectionCounterparty {
+                client_id: a_args.client_id(),
+                connection_id: connection_id(&a_args.client_id(), 0),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    handle_msg_connection_open_confirm(
+        client_with_commitments(ack_commitments),
+        b_connections_after_try.clone(),
+        b_args,
+        b_connections_after_confirm,
+        b_args,
+        &mut Vec::new(),
+        MsgConnectionOpenConfirm {
+            conn_id_on_b: 0,
+            proof_height: Height::default(),
+            proof_ack: vec![],
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_channel_packet_commitment_ping_pong() {
+    let a_conn_args = ConnectionArgs::default();
+    let b_conn_args = ConnectionArgs {
+        metadata_type_id: [3; 32],
+        ibc_handler_address: [4; 20],
+    };
+    let b_conn_id = connection_id(&b_conn_args.client_id(), 1);
+    let a_conn_id = connection_id(&a_conn_args.client_id(), 0);
+    let a_conns = IbcConnections {
+        connections: vec![ConnectionEnd {
+            state: State::Open,
+            counterparty: ConnectionCounterparty {
+                client_id: b_conn_args.client_id(),
+                connection_id: b_conn_id.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        next_channel_number: 0,
+    };
+    let b_conns = IbcConnections {
+        connections: vec![
+            ConnectionEnd::default(),
+            ConnectionEnd {
+                state: State::Open,
+                counterparty: ConnectionCounterparty {
+                    client_id: a_conn_args.client_id(),
+                    connection_id: a_conn_id.clone(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        ],
+        next_channel_number: 1,
+    };
+
+    let mut a_conns_after_init = a_conns.clone();
+    a_conns_after_init.next_channel_number += 1;
+    let a_channel_args = ChannelArgs {
+        metadata_type_id: a_conn_args.metadata_type_id,
+        ibc_handler_address: a_conn_args.ibc_handler_address,
+        channel_id: 0,
+        open: false,
+        port_id: [7; 32],
+    };
+    let b_channel_args = ChannelArgs {
+        metadata_type_id: b_conn_args.metadata_type_id,
+        ibc_handler_address: b_conn_args.ibc_handler_address,
+        channel_id: 1,
+        open: false,
+        port_id: [9; 32],
+    };
+    let a_channel_init = IbcChannel {
+        state: State::Init,
+        number: 0,
+        order: Ordering::Unordered,
+        port_id: a_channel_args.port_id_str(),
+        connection_hops: vec![a_conn_id.clone()],
+        counterparty: ChannelCounterparty {
+            channel_id: "".into(),
+            port_id: b_channel_args.port_id_str(),
+            connection_id: b_conn_id.clone(),
+        },
+        version: "a-version".into(),
+        sequence: Sequence::default(),
+    };
+    let mut commitments = Vec::new();
+    handle_msg_channel_open_init(
+        a_conns.clone(),
+        a_conn_args,
+        a_conns_after_init.clone(),
+        a_conn_args,
+        a_channel_init.clone(),
+        a_channel_args,
+        &mut commitments,
+    )
+    .unwrap();
+
+    let mut b_conns_after_try = b_conns.clone();
+    b_conns_after_try.next_channel_number += 1;
+    let b_channel = IbcChannel {
+        state: State::OpenTry,
+        number: 1,
+        order: Ordering::Unordered,
+        port_id: b_channel_args.port_id_str(),
+        connection_hops: vec![b_conn_id.clone()],
+        counterparty: ChannelCounterparty {
+            channel_id: a_channel_args.channel_id_str(),
+            port_id: a_channel_args.port_id_str(),
+            connection_id: a_conn_id,
+        },
+        version: "a-version".into(),
+        sequence: Sequence::default(),
+    };
+    let mut try_commitments = Vec::new();
+    handle_msg_channel_open_try(
+        client_with_commitments(commitments),
+        b_conns,
+        b_conn_args,
+        b_conns_after_try,
+        b_conn_args,
+        b_channel.clone(),
+        b_channel_args,
+        &mut try_commitments,
+        MsgChannelOpenTry {
+            proof_height: Height::default(),
+            proof_init: vec![],
+        },
+    )
+    .unwrap();
+
+    let mut a_channel_args_open = a_channel_args;
+    a_channel_args_open.open = true;
+    let mut a_channel_ack = a_channel_init.clone();
+    a_channel_ack.state = State::Open;
+    a_channel_ack.counterparty.channel_id = b_channel_args.channel_id_str();
+    let mut ack_commitments = Vec::new();
+    handle_msg_channel_open_ack(
+        client_with_commitments(try_commitments),
+        a_channel_init,
+        a_channel_args,
+        a_channel_ack.clone(),
+        a_channel_args_open,
+        &mut ack_commitments,
+        MsgChannelOpenAck {
+            proof_height: Height::default(),
+            proof_try: vec![],
+        },
+    )
+    .unwrap();
+
+    let mut b_channel_args_open = b_channel_args;
+    b_channel_args_open.open = true;
+    let mut b_channel_confirm = b_channel.clone();
+    b_channel_confirm.state = State::Open;
+    handle_msg_channel_open_confirm(
+        client_with_commitments(ack_commitments),
+        b_channel,
+        b_channel_args,
+        b_channel_confirm.clone(),
+        b_channel_args_open,
+        &mut Vec::new(),
+        MsgChannelOpenConfirm {
+            proof_height: Height::default(),
+            proof_ack: vec![],
+        },
+    )
+    .unwrap();
+
+    let packet = IbcPacket {
+        packet: Packet {
+            sequence: 1,
+            source_port_id: a_channel_args.port_id_str(),
+            source_channel_id: a_channel_args.channel_id_str(),
+            destination_port_id: b_channel_args.port_id_str(),
+            destination_channel_id: b_channel_args.channel_id_str(),
+            data: vec![73; 8],
+            timeout_height: 0,
+            timeout_timestamp: 0,
+        },
+        status: PacketStatus::Send,
+        ack: None,
+    };
+    let a_packet_args = PacketArgs {
+        channel_id: a_channel_args.channel_id,
+        port_id: a_channel_args.port_id,
+        sequence: 1,
+    };
+
+    let mut a_channel_sent = a_channel_ack.clone();
+    a_channel_sent.sequence.next_sequence_sends += 1;
+    let mut send_commitments = Vec::new();
+    handle_msg_send_packet(
+        a_channel_ack,
+        a_channel_args_open,
+        a_channel_sent.clone(),
+        a_channel_args_open,
+        packet.clone(),
+        a_packet_args,
+        &mut send_commitments,
+    )
+    .unwrap();
+
+    let mut b_channel_recv = b_channel_confirm.clone();
+    b_channel_recv.sequence.unorder_receive(1).unwrap();
+    let mut b_packet = packet.clone();
+    b_packet.status = PacketStatus::Recv;
+    let b_packet_args = PacketArgs {
+        channel_id: b_channel_args.channel_id,
+        port_id: b_channel_args.port_id,
+        sequence: 1,
+    };
+    handle_msg_recv_packet(
+        client_with_commitments(send_commitments),
+        b_channel_confirm,
+        b_channel_args_open,
+        b_channel_recv.clone(),
+        b_channel_args_open,
+        None,
+        b_packet.clone(),
+        b_packet_args,
+        &mut Vec::new(),
+        MsgRecvPacket {
+            proof_height: Height::default(),
+            proof_commitment: vec![],
+        },
+    )
+    .unwrap();
+
+    let mut b_packet_ack = b_packet.clone();
+    b_packet_ack.status = PacketStatus::WriteAck;
+    b_packet_ack.ack = Some("ack".into());
+
+    let mut ack_commitments = Vec::new();
+    handle_msg_write_ack_packet(
+        b_channel_recv.clone(),
+        b_channel_args_open,
+        b_channel_recv.clone(),
+        b_channel_args_open,
+        b_packet,
+        b_packet_args,
+        b_packet_ack,
+        b_packet_args,
+        &mut ack_commitments,
+    )
+    .unwrap();
+
+    let mut a_packet_acked = packet.clone();
+    a_packet_acked.status = PacketStatus::Ack;
+    a_packet_acked.ack = Some("ack".into());
+    let a_channel_acked = a_channel_sent.clone();
+    handle_msg_ack_packet(
+        client_with_commitments(ack_commitments),
+        a_channel_sent,
+        a_channel_args_open,
+        a_channel_acked.clone(),
+        a_channel_args_open,
+        packet,
+        a_packet_args,
+        a_packet_acked,
+        a_packet_args,
+        &mut Vec::new(),
+        MsgAckPacket {
+            proof_height: Height::default(),
+            proof_acked: vec![],
+        },
+    )
+    .unwrap();
+
+    let mut a_channel_closed = a_channel_acked.clone();
+    a_channel_closed.state = State::Closed;
+    let mut close_commitments = Vec::new();
+    handle_msg_channel_close_init(
+        a_channel_acked.clone(),
+        a_channel_args_open,
+        a_channel_closed,
+        a_channel_args,
+        &mut close_commitments,
+    )
+    .unwrap();
+
+    let mut b_channel_close = b_channel_recv.clone();
+    b_channel_close.state = State::Closed;
+    handle_msg_channel_close_confirm(
+        client_with_commitments(close_commitments),
+        b_channel_recv,
+        b_channel_args_open,
+        b_channel_close,
+        b_channel_args,
+        &mut Vec::new(),
+        MsgChannelCloseConfirm {
+            proof_height: Height::default(),
+            proof_init: vec![],
+        },
+    )
+    .unwrap();
 }

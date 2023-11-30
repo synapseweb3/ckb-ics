@@ -1,18 +1,57 @@
-use crate::proto::client::Height;
+use axon_tools::keccak_256;
+use ethereum_types::H256;
+use rlp_derive::RlpDecodable;
+use rlp_derive::RlpEncodable;
 
-/// These messages are used to send to CKB. We named some fields with the
-/// suffix `a or b` according to Cosmos's convention.
 use super::object::*;
 use super::Vec;
 use super::U256;
-// use axon_protocol::types::{Bytes, U256};
-use rlp_derive::RlpDecodable;
-use rlp_derive::RlpEncodable;
+use crate::proto::client::Height;
+use crate::WriteOrVerifyCommitments;
 
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct Envelope {
     pub msg_type: MsgType,
+    pub commitments: Vec<CommitmentKV>,
     pub content: Vec<u8>,
+}
+
+// Verify.
+impl WriteOrVerifyCommitments for &[CommitmentKV] {
+    fn write_commitments<K, V>(
+        &mut self,
+        kvs: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<(), VerifyError>
+    where
+        K: AsRef<[u8]>,
+        V: AsRef<[u8]>,
+    {
+        let mut expected: Vec<CommitmentKV> = Vec::new();
+        expected.write_commitments(kvs)?;
+        if **self == expected {
+            Ok(())
+        } else {
+            Err(VerifyError::Commitment)
+        }
+    }
+}
+
+// Write.
+impl WriteOrVerifyCommitments for Vec<CommitmentKV> {
+    fn write_commitments<K, V>(
+        &mut self,
+        kvs: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<(), VerifyError>
+    where
+        K: AsRef<[u8]>,
+        V: AsRef<[u8]>,
+    {
+        *self = kvs
+            .into_iter()
+            .map(|(k, v)| CommitmentKV::hash(k, v))
+            .collect();
+        Ok(())
+    }
 }
 
 impl_enum_rlp!(
@@ -207,3 +246,15 @@ pub struct MsgTimeoutPacket {
 // in Business side to be consumed to obtain its capacity
 #[derive(RlpDecodable, RlpEncodable)]
 pub struct MsgConsumeAckPacket {}
+
+#[derive(RlpDecodable, RlpEncodable, PartialEq, Eq, Default)]
+pub struct CommitmentKV(pub H256, pub H256);
+
+impl CommitmentKV {
+    pub fn hash(path: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> Self {
+        Self(
+            keccak_256(path.as_ref()).into(),
+            keccak_256(value.as_ref()).into(),
+        )
+    }
+}

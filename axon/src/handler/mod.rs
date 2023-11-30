@@ -2,19 +2,16 @@
 
 use alloc::string::ToString;
 use prost::Message;
-use rlp::decode;
 
 use crate::consts::COMMITMENT_PREFIX;
-use crate::get_channel_id_str;
 use crate::message::{
-    Envelope, MsgAckPacket, MsgChannelCloseConfirm, MsgChannelCloseInit, MsgChannelOpenAck,
-    MsgChannelOpenConfirm, MsgChannelOpenInit, MsgChannelOpenTry, MsgConnectionOpenAck,
-    MsgConnectionOpenConfirm, MsgConnectionOpenInit, MsgConnectionOpenTry, MsgConsumeAckPacket,
-    MsgRecvPacket, MsgSendPacket, MsgType, MsgWriteAckPacket,
+    MsgAckPacket, MsgChannelCloseConfirm, MsgChannelOpenAck, MsgChannelOpenConfirm,
+    MsgChannelOpenTry, MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenTry,
+    MsgRecvPacket,
 };
 use crate::object::{ConnectionEnd, Ordering, State, VerifyError, Version};
 use crate::proto::client::Height;
-use crate::{commitment::*, connection_id, proto};
+use crate::{commitment::*, connection_id, proto, WriteOrVerifyCommitments};
 use crate::{ChannelArgs, ConnectionArgs, PacketArgs};
 
 mod objects;
@@ -23,13 +20,12 @@ mod test;
 
 pub use objects::*;
 
-pub fn handle_msg_connection_open_init<C: Client>(
-    _client: C,
+pub fn handle_msg_connection_open_init(
     mut old_connections: IbcConnections,
     old_args: ConnectionArgs,
     new_connections: IbcConnections,
     new_args: ConnectionArgs,
-    _: MsgConnectionOpenInit,
+    commitment: impl WriteOrVerifyCommitments,
 ) -> Result<(), VerifyError> {
     if old_args != new_args {
         return Err(VerifyError::WrongConnectionArgs);
@@ -59,7 +55,15 @@ pub fn handle_msg_connection_open_init<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
-    Ok(())
+    let connection_idx = new_connections.connections.len() - 1;
+
+    let client_id = new_args.client_id();
+
+    write_connection_state(
+        commitment,
+        &connection_id(&client_id, connection_idx),
+        &new.clone().to_proto(client_id),
+    )
 }
 
 pub fn handle_msg_connection_open_try<C: Client>(
@@ -68,6 +72,7 @@ pub fn handle_msg_connection_open_try<C: Client>(
     old_args: ConnectionArgs,
     new_connections: IbcConnections,
     new_args: ConnectionArgs,
+    commitment: impl WriteOrVerifyCommitments,
     msg: MsgConnectionOpenTry,
 ) -> Result<(), VerifyError> {
     if old_args != new_args {
@@ -92,11 +97,19 @@ pub fn handle_msg_connection_open_try<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
+    let client_id = new_args.client_id();
+
+    write_connection_state(
+        commitment,
+        &connection_id(&client_id, new_connections.connections.len() - 1),
+        &connection.clone().to_proto(client_id.clone()),
+    )?;
+
     let expected_connection_end_on_counterparty = proto::connection::ConnectionEnd {
         state: proto::connection::State::Init as _,
         client_id: counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            client_id: new_args.client_id(),
+            client_id,
             connection_id: "".to_string(),
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
@@ -116,6 +129,14 @@ pub fn handle_msg_connection_open_try<C: Client>(
 
     // TODO: verify client and consensus.
     Ok(())
+}
+
+fn write_connection_state(
+    mut commitment: impl WriteOrVerifyCommitments,
+    connection_id: &str,
+    connection: &proto::connection::ConnectionEnd,
+) -> Result<(), VerifyError> {
+    commitment.write_commitments([(connection_path(connection_id), connection.encode_to_vec())])
 }
 
 fn verify_connection_state(
@@ -139,6 +160,7 @@ pub fn handle_msg_connection_open_ack<C: Client>(
     old_args: ConnectionArgs,
     new: IbcConnections,
     new_args: ConnectionArgs,
+    commitment: impl WriteOrVerifyCommitments,
     msg: MsgConnectionOpenAck,
 ) -> Result<(), VerifyError> {
     if old_args != new_args {
@@ -158,13 +180,21 @@ pub fn handle_msg_connection_open_ack<C: Client>(
         return Err(VerifyError::WrongConnectionState);
     }
 
-    // Verify counterparty connection state.
     let client_id = new_args.client_id();
+    let connection_id = connection_id(&client_id, conn_idx);
+
+    write_connection_state(
+        commitment,
+        &connection_id,
+        &new_connection.clone().to_proto(client_id.clone()),
+    )?;
+
+    // Verify counterparty connection state.
     let expected = proto::connection::ConnectionEnd {
         state: proto::connection::State::Tryopen as _,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            connection_id: connection_id(&client_id, conn_idx),
+            connection_id,
             client_id,
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
@@ -191,6 +221,7 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     old_args: ConnectionArgs,
     new: IbcConnections,
     new_args: ConnectionArgs,
+    commitment: impl WriteOrVerifyCommitments,
     msg: MsgConnectionOpenConfirm,
 ) -> Result<(), VerifyError> {
     if old_args != new_args {
@@ -210,13 +241,20 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     }
 
     let client_id = new_args.client_id();
+    let connection_id = connection_id(&client_id, conn_idx);
+
+    write_connection_state(
+        commitment,
+        &connection_id,
+        &new_connection.clone().to_proto(client_id.clone()),
+    )?;
 
     // Verify counterparty state.
     let expected = proto::connection::ConnectionEnd {
         state: proto::connection::State::Open as _,
         client_id: new_connection.counterparty.client_id.clone(),
         counterparty: Some(proto::connection::Counterparty {
-            connection_id: connection_id(&client_id, conn_idx),
+            connection_id,
             client_id,
             prefix: Some(proto::commitment::MerklePrefix {
                 key_prefix: COMMITMENT_PREFIX.to_vec(),
@@ -237,17 +275,16 @@ pub fn handle_msg_connection_open_confirm<C: Client>(
     Ok(())
 }
 
-pub fn handle_channel_open_init_and_try<C: Client>(
-    client: C,
-    channel: IbcChannel,
-    channel_args: ChannelArgs,
-    envelop: Envelope,
+pub fn handle_msg_channel_open_init(
     mut old_connections: IbcConnections,
     old_connection_args: ConnectionArgs,
     new_connections: IbcConnections,
     new_connection_args: ConnectionArgs,
+    channel: IbcChannel,
+    channel_args: ChannelArgs,
+    commitment: impl WriteOrVerifyCommitments,
 ) -> Result<(), VerifyError> {
-    if channel.number != old_connections.next_channel_number {
+    if channel_args.channel_id != old_connections.next_channel_number {
         return Err(VerifyError::WrongChannel);
     }
     old_connections.next_channel_number += 1;
@@ -259,51 +296,23 @@ pub fn handle_channel_open_init_and_try<C: Client>(
         return Err(VerifyError::WrongConnectionArgs);
     }
 
-    if channel_args.connection() != old_connection_args
-        || channel_args.open
-        || channel_args.channel_id != channel.number
-        || hex::encode(channel_args.port_id) != channel.port_id
-    {
+    if channel_args.connection() != old_connection_args || channel_args.open {
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    match envelop.msg_type {
-        MsgType::MsgChannelOpenInit => {
-            let init_msg = decode::<MsgChannelOpenInit>(&envelop.content)
-                .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_init(
-                &new_connection_args.client_id(),
-                &new_connections,
-                channel,
-                init_msg,
-            )
-        }
-        MsgType::MsgChannelOpenTry => {
-            let open_try_msg = decode::<MsgChannelOpenTry>(&envelop.content)
-                .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_try(
-                client,
-                &new_connection_args.client_id(),
-                &new_connections,
-                channel,
-                open_try_msg,
-            )
-        }
-        _ => Err(VerifyError::EventNotMatch),
-    }
-}
+    let new = channel;
 
-pub fn handle_msg_channel_open_init(
-    client_id: &str,
-    ibc_connections: &IbcConnections,
-    new: IbcChannel,
-    _msg: MsgChannelOpenInit,
-) -> Result<(), VerifyError> {
+    if new.number != channel_args.channel_id || new.port_id != channel_args.port_id_str() {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    let client_id = new_connection_args.client_id();
+
     if new.connection_hops.len() != 1 {
         return Err(VerifyError::ConnectionsWrong);
     }
-    let conn = ibc_connections
-        .get_by_id(client_id, &new.connection_hops[0])
+    let conn = new_connections
+        .get_by_id(&client_id, &new.connection_hops[0])
         .ok_or(VerifyError::WrongConnectionId)?;
 
     if conn.state != State::Open {
@@ -322,22 +331,55 @@ pub fn handle_msg_channel_open_init(
         return Err(VerifyError::WrongConnectionCounterparty);
     }
 
-    Ok(())
+    write_channel_commitment(
+        commitment,
+        &new.port_id.clone(),
+        &channel_args.channel_id_str(),
+        &new.into(),
+    )
 }
 
 pub fn handle_msg_channel_open_try<C: Client>(
     client: C,
-    client_id: &str,
-    ibc_connections: &IbcConnections,
-    new: IbcChannel,
+    mut old_connections: IbcConnections,
+    old_connection_args: ConnectionArgs,
+    new_connections: IbcConnections,
+    new_connection_args: ConnectionArgs,
+    channel: IbcChannel,
+    channel_args: ChannelArgs,
+    commitment: impl WriteOrVerifyCommitments,
     msg: MsgChannelOpenTry,
 ) -> Result<(), VerifyError> {
+    if channel_args.channel_id != old_connections.next_channel_number {
+        return Err(VerifyError::WrongChannel);
+    }
+    old_connections.next_channel_number += 1;
+    if old_connections != new_connections {
+        return Err(VerifyError::WrongConnectionState);
+    }
+
+    if old_connection_args != new_connection_args {
+        return Err(VerifyError::WrongConnectionArgs);
+    }
+
+    if channel_args.connection() != old_connection_args || channel_args.open {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
+    let new = channel;
+
+    if new.number != channel_args.channel_id || new.port_id != channel_args.port_id_str() {
+        return Err(VerifyError::WrongChannel);
+    }
+
+    let client_id = new_connection_args.client_id();
+
     if new.connection_hops.len() != 1 {
         return Err(VerifyError::ConnectionsWrong);
     }
 
-    let conn = ibc_connections
-        .get_by_id(client_id, &new.connection_hops[0])
+    let conn = new_connections
+        .get_by_id(&client_id, &new.connection_hops[0])
         .ok_or(VerifyError::WrongConnectionId)?;
 
     if conn.state != State::Open {
@@ -356,6 +398,15 @@ pub fn handle_msg_channel_open_try<C: Client>(
         return Err(VerifyError::WrongConnectionCounterparty);
     }
 
+    let port_id = new.port_id.clone();
+
+    write_channel_commitment(
+        commitment,
+        &port_id,
+        &channel_args.channel_id_str(),
+        &new.clone().into(),
+    )?;
+
     let expected = proto::channel::Channel {
         state: proto::channel::State::Init as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
@@ -365,7 +416,7 @@ pub fn handle_msg_channel_open_try<C: Client>(
         version: new.version,
         counterparty: Some(proto::channel::Counterparty {
             channel_id: "".into(),
-            port_id: new.port_id,
+            port_id,
         }),
     };
 
@@ -379,6 +430,15 @@ pub fn handle_msg_channel_open_try<C: Client>(
     )?;
 
     Ok(())
+}
+
+fn write_channel_commitment(
+    mut commitment: impl WriteOrVerifyCommitments,
+    port_id: &str,
+    channel_id: &str,
+    channel: &proto::channel::Channel,
+) -> Result<(), VerifyError> {
+    commitment.write_commitments([(channel_path(port_id, channel_id), channel.encode_to_vec())])
 }
 
 fn verify_channel_state(
@@ -397,43 +457,23 @@ fn verify_channel_state(
     )
 }
 
-pub fn handle_channel_open_ack_and_confirm<C: Client>(
-    client: C,
-    envelope: Envelope,
-    old_channel: IbcChannel,
-    old_args: ChannelArgs,
-    new_channel: IbcChannel,
-    new_args: ChannelArgs,
-) -> Result<(), VerifyError> {
-    if old_args.open
-        || !new_args.open
-        || old_args.metadata_type_id != new_args.metadata_type_id
-        || old_args.channel_id != new_args.channel_id
-        || old_args.port_id != new_args.port_id
-    {
-        return Err(VerifyError::WrongChannelArgs);
-    }
-    match envelope.msg_type {
-        MsgType::MsgChannelOpenAck => {
-            let msg = decode::<MsgChannelOpenAck>(&envelope.content)
-                .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_ack(client, old_channel, new_channel, msg)
-        }
-        MsgType::MsgChannelOpenConfirm => {
-            let msg = decode::<MsgChannelOpenConfirm>(&envelope.content)
-                .map_err(|_| VerifyError::SerdeError)?;
-            handle_msg_channel_open_confirm(client, old_channel, new_channel, msg)
-        }
-        _ => Err(VerifyError::EventNotMatch),
-    }
-}
-
 pub fn handle_msg_channel_open_ack<C: Client>(
     client: C,
     mut old: IbcChannel,
+    mut old_args: ChannelArgs,
     new: IbcChannel,
+    new_args: ChannelArgs,
+    commitment: impl WriteOrVerifyCommitments,
     msg: MsgChannelOpenAck,
 ) -> Result<(), VerifyError> {
+    if old_args.open {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+    old_args.open = true;
+    if old_args != new_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
     if old.state != State::Init {
         return Err(VerifyError::WrongChannelState);
     }
@@ -446,14 +486,19 @@ pub fn handle_msg_channel_open_ack<C: Client>(
         return Err(VerifyError::WrongChannel);
     }
 
+    let port_id = new.port_id.clone();
+    let channel_id = new_args.channel_id_str();
+
+    write_channel_commitment(commitment, &port_id, &channel_id, &new.clone().into())?;
+
     let expected = proto::channel::Channel {
         state: proto::channel::State::Tryopen as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
         connection_hops: vec![new.counterparty.connection_id],
         version: new.version,
         counterparty: Some(proto::channel::Counterparty {
-            channel_id: get_channel_id_str(new.number),
-            port_id: new.port_id,
+            channel_id,
+            port_id,
         }),
     };
 
@@ -472,9 +517,20 @@ pub fn handle_msg_channel_open_ack<C: Client>(
 pub fn handle_msg_channel_open_confirm<C: Client>(
     client: C,
     mut old: IbcChannel,
+    mut old_args: ChannelArgs,
     new: IbcChannel,
+    new_args: ChannelArgs,
+    commitment: impl WriteOrVerifyCommitments,
     msg: MsgChannelOpenConfirm,
 ) -> Result<(), VerifyError> {
+    if old_args.open {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+    old_args.open = true;
+    if old_args != new_args {
+        return Err(VerifyError::WrongChannelArgs);
+    }
+
     if old.state != State::OpenTry {
         return Err(VerifyError::WrongChannelState);
     }
@@ -483,14 +539,19 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
         return Err(VerifyError::WrongChannel);
     }
 
+    let port_id = new.port_id.clone();
+    let channel_id = new_args.channel_id_str();
+
+    write_channel_commitment(commitment, &port_id, &channel_id, &new.clone().into())?;
+
     let expected = proto::channel::Channel {
         state: proto::channel::State::Open as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
         connection_hops: vec![new.counterparty.connection_id],
         version: new.version,
         counterparty: Some(proto::channel::Counterparty {
-            channel_id: get_channel_id_str(new.number),
-            port_id: new.port_id,
+            channel_id,
+            port_id,
         }),
     };
 
@@ -506,13 +567,12 @@ pub fn handle_msg_channel_open_confirm<C: Client>(
     Ok(())
 }
 
-pub fn handle_msg_channel_close_init<C: Client>(
-    _: C,
+pub fn handle_msg_channel_close_init(
     mut old: IbcChannel,
     mut old_args: ChannelArgs,
     new: IbcChannel,
     new_args: ChannelArgs,
-    _: MsgChannelCloseInit,
+    commitment: impl WriteOrVerifyCommitments,
 ) -> Result<(), VerifyError> {
     if old.state != State::Open {
         return Err(VerifyError::WrongChannelState);
@@ -530,6 +590,13 @@ pub fn handle_msg_channel_close_init<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
+    write_channel_commitment(
+        commitment,
+        &new.port_id.clone(),
+        &new_args.channel_id_str(),
+        &new.into(),
+    )?;
+
     Ok(())
 }
 
@@ -539,6 +606,7 @@ pub fn handle_msg_channel_close_confirm<C: Client>(
     mut old_args: ChannelArgs,
     new: IbcChannel,
     new_args: ChannelArgs,
+    commitment: impl WriteOrVerifyCommitments,
     msg: MsgChannelCloseConfirm,
 ) -> Result<(), VerifyError> {
     if old.state != State::Open {
@@ -557,14 +625,19 @@ pub fn handle_msg_channel_close_confirm<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
+    let port_id = new.port_id.clone();
+    let channel_id = new_args.channel_id_str();
+
+    write_channel_commitment(commitment, &port_id, &channel_id, &new.clone().into())?;
+
     let expected = proto::channel::Channel {
         state: proto::channel::State::Closed as i32,
         ordering: proto::channel::Order::from(new.order) as i32,
         connection_hops: vec![new.counterparty.connection_id],
-        version: "TODO".into(),
+        version: new.version,
         counterparty: Some(proto::channel::Counterparty {
-            channel_id: get_channel_id_str(new.number),
-            port_id: new.port_id,
+            channel_id,
+            port_id,
         }),
     };
 
@@ -578,15 +651,14 @@ pub fn handle_msg_channel_close_confirm<C: Client>(
     )
 }
 
-pub fn handle_msg_send_packet<C: Client>(
-    _: C,
+pub fn handle_msg_send_packet(
     mut old_channel: IbcChannel,
     old_channel_args: ChannelArgs,
     new_channel: IbcChannel,
     new_channel_args: ChannelArgs,
     ibc_packet: IbcPacket,
     packet_args: PacketArgs,
-    _: MsgSendPacket,
+    mut commitment: impl WriteOrVerifyCommitments,
 ) -> Result<(), VerifyError> {
     if ibc_packet.packet.sequence != old_channel.sequence.next_sequence_sends {
         return Err(VerifyError::WrongPacketSequence);
@@ -601,9 +673,11 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if hex::encode(packet_args.port_id) != ibc_packet.packet.source_port_id
+    packet_args.is_channel(&new_channel_args)?;
+
+    if new_channel_args.port_id_str() != ibc_packet.packet.source_port_id
         || packet_args.sequence != ibc_packet.packet.sequence
-        || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.source_channel_id
+        || new_channel_args.channel_id_str() != ibc_packet.packet.source_channel_id
     {
         return Err(VerifyError::WrongPacketArgs);
     }
@@ -626,6 +700,21 @@ pub fn handle_msg_send_packet<C: Client>(
         return Err(VerifyError::WrongPacketAck);
     }
 
+    commitment.write_commitments([(
+        packet_commitment_path(
+            &ibc_packet.packet.source_port_id,
+            &ibc_packet.packet.source_channel_id,
+            ibc_packet.packet.sequence,
+        ),
+        sha256(&[
+            &ibc_packet.packet.timeout_timestamp.to_le_bytes(),
+            // Revision number
+            &0u64.to_le_bytes(),
+            &ibc_packet.packet.timeout_height.to_le_bytes(),
+            &sha256(&[&ibc_packet.packet.data]),
+        ]),
+    )])?;
+
     Ok(())
 }
 
@@ -638,6 +727,7 @@ pub fn handle_msg_recv_packet<C: Client>(
     useless_ibc_packet: Option<IbcPacket>,
     ibc_packet: IbcPacket,
     packet_args: PacketArgs,
+    mut commitment: impl WriteOrVerifyCommitments,
     msg: MsgRecvPacket,
 ) -> Result<(), VerifyError> {
     // A write_ack packet can be consumed.
@@ -678,12 +768,16 @@ pub fn handle_msg_recv_packet<C: Client>(
         return Err(VerifyError::WrongChannelArgs);
     }
 
-    if hex::encode(packet_args.port_id) != ibc_packet.packet.destination_port_id
+    packet_args.is_channel(&new_channel_args)?;
+
+    if new_channel_args.port_id_str() != ibc_packet.packet.destination_port_id
         || packet_args.sequence != ibc_packet.packet.sequence
-        || get_channel_id_str(packet_args.channel_id) != ibc_packet.packet.destination_channel_id
+        || new_channel_args.channel_id_str() != ibc_packet.packet.destination_channel_id
     {
         return Err(VerifyError::WrongPacketArgs);
     }
+
+    commitment.write_no_commitment()?;
 
     client.verify_membership(
         msg.proof_height,
@@ -691,7 +785,7 @@ pub fn handle_msg_recv_packet<C: Client>(
         packet_commitment_path(
             &ibc_packet.packet.source_port_id,
             &ibc_packet.packet.source_channel_id,
-            ibc_packet.packet.sequence.into(),
+            ibc_packet.packet.sequence,
         )
         .as_bytes(),
         &sha256(&[
@@ -723,6 +817,7 @@ pub fn handle_msg_ack_packet<C: Client>(
     old_packet_args: PacketArgs,
     new_ibc_packet: IbcPacket,
     new_packet_args: PacketArgs,
+    mut commitment: impl WriteOrVerifyCommitments,
     msg: MsgAckPacket,
 ) -> Result<(), VerifyError> {
     if old_ibc_packet.status != PacketStatus::Send {
@@ -758,13 +853,15 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongChannel);
     }
 
+    commitment.write_no_commitment()?;
+
     client.verify_membership(
         msg.proof_height,
         &msg.proof_acked,
         packet_acknowledgement_commitment_path(
             &new_ibc_packet.packet.destination_port_id,
             &new_ibc_packet.packet.destination_channel_id,
-            new_ibc_packet.packet.sequence.into(),
+            new_ibc_packet.packet.sequence,
         )
         .as_bytes(),
         &sha256(&[&new_ibc_packet.ack.unwrap()]),
@@ -780,7 +877,7 @@ pub fn handle_msg_write_ack_packet(
     old_packet_args: PacketArgs,
     new_ibc_packet: IbcPacket,
     new_packet_args: PacketArgs,
-    _: MsgWriteAckPacket,
+    mut commitment: impl WriteOrVerifyCommitments,
 ) -> Result<(), VerifyError> {
     if old_channel_args != new_channel_args {
         return Err(VerifyError::WrongChannelArgs);
@@ -808,17 +905,27 @@ pub fn handle_msg_write_ack_packet(
         return Err(VerifyError::WrongPacketAck);
     }
 
+    commitment.write_commitments([(
+        packet_acknowledgement_commitment_path(
+            &new_ibc_packet.packet.destination_port_id,
+            &new_ibc_packet.packet.destination_channel_id,
+            new_ibc_packet.packet.sequence,
+        ),
+        sha256(&[new_ibc_packet.ack.as_deref().unwrap()]),
+    )])?;
+
     Ok(())
 }
 
 pub fn handle_msg_consume_ack_packet(
     old_ibc_packet: IbcPacket,
-    _: PacketArgs,
-    _: MsgConsumeAckPacket,
+    mut commitment: impl WriteOrVerifyCommitments,
 ) -> Result<(), VerifyError> {
     if old_ibc_packet.status != PacketStatus::Ack {
         return Err(VerifyError::WrongPacketStatus);
     }
+
+    commitment.write_no_commitment()?;
 
     Ok(())
 }
