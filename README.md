@@ -16,15 +16,14 @@ ckb-ics-axon = { git = "https://github.com/synapseweb3/ckb-ics", branch = "main"
 
 ## Object Encoding/Decoding
 
-IBC-compatible objects owned by IBC cells are encoded with RLP algorithm, to ensure compatibility with Axon — the exclusively compatible counterparty chain so far, facilitating the integration with Solidity.
+IBC commitments are encoded with protobuf etc., compatible with [ibc-solidity](https://github.com/synapseweb3/ibc-solidity-contract/) or ibc-go.
 
-Given the widespread adoption of the RLP encode/decode algorithm across mainstream programming languages, RLP can be considered as a standard algorithm for Forcerelay to encode and decode IBC-compatible objects, even in future cross-chain interactions between CKB/Axon and Cosmos.
+IBC objects (whose hash are stored in ibc cells) are encoded with RLP due to historical implementation choices.
 
-## Transaction Verification
+## Commitment Verification
 
-The primary responsibility of an IBC light client is to validate counterparty transactions. In the case of `Axon → CKB`, Axon’s light client on CKB network should follow the following steps to complete a verification process:
+The primary responsibility of an IBC light client is to validate counterparty commitments. In the case of `Axon → CKB`, Axon’s light client on CKB network follows the following steps to complete a verification process:
 
 1. Verify the validity of an Axon `block` by referencing the metadata cells directly maintained by Axon itself.
-2. Verify whether a provided transaction **`receipt`** is included in the receipts MPT root from the Axon block.
-
-Upon successful verification of the transaction receipt, event parameters extracted from the event log in the receipt are compared with user-specified parameters in the IBC connection, channel, and packet messages.
+2. Verify the account MPT proof of the IBC handler to get its storage trie root.
+3. Verify the storage MPT proof for the commitment path and value.
