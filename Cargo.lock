@@ -35,7 +35,7 @@ dependencies = [
 [[package]]
 name = "axon-tools"
 version = "0.1.1"
-source = "git+https://github.com/axonweb3/axon.git?rev=fc7ce22c#fc7ce22c60eeea61399c133dbfd3b0e90e9a78b2"
+source = "git+https://github.com/axonweb3/axon.git?rev=c92fbf3c#c92fbf3c09bddb006141a6677029d0dd7b85bb1c"
 dependencies = [
  "bit-vec",
  "blst",
