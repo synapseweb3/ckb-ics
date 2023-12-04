@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 rlp = { version = "0.5.2", default-features = false }
 rlp-derive = { version = "0.1.0", default-features = false }
-axon-tools = { git = "https://github.com/axonweb3/axon.git", rev = "f889d38", features = [
+axon-tools = { git = "https://github.com/axonweb3/axon.git", rev = "c92fbf3c", features = [
     "proof",
 ] }
 axon-types = { git = "https://github.com/axonweb3/axon-contract", rev = "8106ddc0266" }
