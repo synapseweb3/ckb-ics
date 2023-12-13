@@ -174,6 +174,7 @@ impl ChannelArgs {
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct PacketArgs {
+    pub ibc_handler_address: [u8; 20], // distinguish different packet cells with same channel and port
     pub channel_id: u64,
     pub port_id: [u8; 32], // mark as owner_lockhash
     pub sequence: u64,
@@ -190,14 +191,20 @@ impl PacketArgs {
 
     pub fn from_slice(mut slice: &[u8]) -> Result<Self, ()> {
         Ok(Self {
+            ibc_handler_address: *try_read!(slice, 20),
             channel_id: u64::from_le_bytes(*try_read!(slice, 8)),
             port_id: *try_read!(slice, 32),
             sequence: u64::from_le_bytes(*try_read_last!(slice, 8)),
         })
     }
 
+    pub fn get_prefix_for_all(self) -> Vec<u8> {
+        self.ibc_handler_address.to_vec()
+    }
+
     pub fn get_search_args(self, search_all: bool) -> Vec<u8> {
         let mut result = Vec::new();
+        result.extend(self.ibc_handler_address);
         result.extend(self.channel_id.to_le_bytes());
         result.extend(self.port_id);
         if !search_all {

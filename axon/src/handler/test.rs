@@ -1104,6 +1104,7 @@ fn test_channel_packet_commitment_ping_pong() {
         ack: None,
     };
     let a_packet_args = PacketArgs {
+        ibc_handler_address: [0u8; 20],
         channel_id: a_channel_args.channel_id,
         port_id: a_channel_args.port_id,
         sequence: 1,
@@ -1128,6 +1129,7 @@ fn test_channel_packet_commitment_ping_pong() {
     let mut b_packet = packet.clone();
     b_packet.status = PacketStatus::Recv;
     let b_packet_args = PacketArgs {
+        ibc_handler_address: [0u8; 20],
         channel_id: b_channel_args.channel_id,
         port_id: b_channel_args.port_id,
         sequence: 1,
