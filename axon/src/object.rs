@@ -12,7 +12,7 @@ use rlp_derive::RlpEncodable;
 #[derive(Debug)]
 #[repr(i8)]
 pub enum VerifyError {
-    FoundNoMessage = 100,
+    FoundNoMessage = 70,
     EventNotMatch,
     InvalidReceiptProof,
     SerdeError,
@@ -22,6 +22,7 @@ pub enum VerifyError {
     WrongConnectionnNumber,
     WrongPortId,
     WrongCommonHexId,
+    WrongIBCHandlerAddress,
 
     ConnectionsWrong,
 
@@ -46,8 +47,8 @@ pub enum VerifyError {
     WrongPacketArgs,
     WrongPacketAck,
 
-    Commitment = 98,
-    Mpt = 99,
+    Commitment,
+    Mpt,
 }
 
 impl From<VerifyError> for i8 {

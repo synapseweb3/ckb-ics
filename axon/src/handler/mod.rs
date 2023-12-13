@@ -331,6 +331,10 @@ pub fn handle_msg_channel_open_init(
         return Err(VerifyError::WrongConnectionCounterparty);
     }
 
+    if new_connection_args.ibc_handler_address != channel_args.ibc_handler_address {
+        return Err(VerifyError::WrongIBCHandlerAddress);
+    }
+
     write_channel_commitment(
         commitment,
         &new.port_id.clone(),
@@ -396,6 +400,10 @@ pub fn handle_msg_channel_open_try<C: Client>(
 
     if new.counterparty.connection_id != conn.counterparty.connection_id {
         return Err(VerifyError::WrongConnectionCounterparty);
+    }
+
+    if new_connection_args.ibc_handler_address != channel_args.ibc_handler_address {
+        return Err(VerifyError::WrongIBCHandlerAddress);
     }
 
     let port_id = new.port_id.clone();
@@ -700,6 +708,10 @@ pub fn handle_msg_send_packet(
         return Err(VerifyError::WrongPacketAck);
     }
 
+    if new_channel_args.ibc_handler_address != packet_args.ibc_handler_address {
+        return Err(VerifyError::WrongIBCHandlerAddress);
+    }
+
     commitment.write_commitments([(
         packet_commitment_path(
             &ibc_packet.packet.source_port_id,
@@ -775,6 +787,10 @@ pub fn handle_msg_recv_packet<C: Client>(
         || new_channel_args.channel_id_str() != ibc_packet.packet.destination_channel_id
     {
         return Err(VerifyError::WrongPacketArgs);
+    }
+
+    if new_channel_args.ibc_handler_address != packet_args.ibc_handler_address {
+        return Err(VerifyError::WrongIBCHandlerAddress);
     }
 
     commitment.write_no_commitment()?;
@@ -853,6 +869,10 @@ pub fn handle_msg_ack_packet<C: Client>(
         return Err(VerifyError::WrongChannel);
     }
 
+    if new_channel_args.ibc_handler_address != new_packet_args.ibc_handler_address {
+        return Err(VerifyError::WrongIBCHandlerAddress);
+    }
+
     commitment.write_no_commitment()?;
 
     client.verify_membership(
@@ -903,6 +923,10 @@ pub fn handle_msg_write_ack_packet(
 
     if old_ibc_packet.ack.is_some() || new_ibc_packet.ack.is_none() {
         return Err(VerifyError::WrongPacketAck);
+    }
+
+    if new_channel_args.ibc_handler_address != new_packet_args.ibc_handler_address {
+        return Err(VerifyError::WrongIBCHandlerAddress);
     }
 
     commitment.write_commitments([(
