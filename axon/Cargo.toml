@@ -9,7 +9,7 @@ rlp-derive = { version = "0.1.0", default-features = false }
 axon-tools = { git = "https://github.com/axonweb3/axon.git", rev = "dd35f500", features = [
     "proof",
 ] }
-axon-types = { git = "https://github.com/axonweb3/axon-contract", rev = "8106ddc0266" }
+axon-types = { git = "https://github.com/axonweb3/axon-contract", rev = "b82a843" }
 ethereum-types = { version = "0.14.1", default-features = false, features = [
     "ethbloom",
     "rlp",
