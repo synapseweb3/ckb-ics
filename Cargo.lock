@@ -50,7 +50,7 @@ dependencies = [
 [[package]]
 name = "axon-types"
 version = "0.1.0"
-source = "git+https://github.com/axonweb3/axon-contract?rev=8106ddc0266#8106ddc026652b0fce21923b710ac9a3f1c8e8a7"
+source = "git+https://github.com/axonweb3/axon-contract?rev=b82a843#b82a843b36a5565524a14a537a5dbe393e26ca65"
 dependencies = [
  "molecule",
  "molecule2",
@@ -455,7 +455,7 @@ dependencies = [
 [[package]]
 name = "molecule2"
 version = "0.1.0"
-source = "git+https://github.com/axonweb3/axon-contract?rev=8106ddc0266#8106ddc026652b0fce21923b710ac9a3f1c8e8a7"
+source = "git+https://github.com/axonweb3/axon-contract?rev=b82a843#b82a843b36a5565524a14a537a5dbe393e26ca65"
 
 [[package]]
 name = "multimap"
