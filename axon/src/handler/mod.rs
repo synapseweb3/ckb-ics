@@ -331,10 +331,6 @@ pub fn handle_msg_channel_open_init(
         return Err(VerifyError::WrongConnectionCounterparty);
     }
 
-    if new_connection_args.ibc_handler_address != channel_args.ibc_handler_address {
-        return Err(VerifyError::WrongIBCHandlerAddress);
-    }
-
     write_channel_commitment(
         commitment,
         &new.port_id.clone(),
@@ -400,10 +396,6 @@ pub fn handle_msg_channel_open_try<C: Client>(
 
     if new.counterparty.connection_id != conn.counterparty.connection_id {
         return Err(VerifyError::WrongConnectionCounterparty);
-    }
-
-    if new_connection_args.ibc_handler_address != channel_args.ibc_handler_address {
-        return Err(VerifyError::WrongIBCHandlerAddress);
     }
 
     let port_id = new.port_id.clone();
